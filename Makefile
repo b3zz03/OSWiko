@@ -1,0 +1,70 @@
+# OSWiko - build completa
+#
+#   make            kernel + userland + initramfs
+#   make run        avvia nell'emulatore QEMU (finestra grafica)
+#   make run-serial avvia senza finestra (solo console seriale)
+#   make clean      cancella build/ (tranne il sorgente del kernel)
+
+ARCH          := arm64
+CROSS_COMPILE ?= aarch64-linux-gnu-
+KERNEL_REPO   ?= https://github.com/gregkh/linux
+KERNEL_TAG    ?= v6.12.118
+JOBS          ?= $(shell nproc)
+
+BUILD   := build
+KSRC    := $(BUILD)/linux
+OUT     := out
+KCONFIG := kernel/qemu.config
+
+USERLAND_BINS := $(BUILD)/userland/init $(BUILD)/userland/ui $(BUILD)/userland/osh
+FONTS := $(wildcard assets/fonts/*.otf)
+
+all: $(OUT)/Image $(OUT)/initramfs.cpio.gz
+
+# ---- kernel ----
+$(KSRC)/Makefile:
+	git clone --depth 1 --branch $(KERNEL_TAG) $(KERNEL_REPO) $(KSRC)
+
+$(KSRC)/.config: $(KCONFIG) | $(KSRC)/Makefile
+	$(MAKE) -C $(KSRC) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) \
+		allnoconfig KCONFIG_ALLCONFIG=$(abspath $(KCONFIG))
+
+$(OUT)/Image: $(KSRC)/.config
+	$(MAKE) -C $(KSRC) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -j$(JOBS) Image
+	mkdir -p $(OUT)
+	cp $(KSRC)/arch/arm64/boot/Image $@
+
+kernel: $(OUT)/Image
+kernel-menuconfig: $(KSRC)/.config
+	$(MAKE) -C $(KSRC) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) menuconfig
+
+# ---- userland ----
+userland:
+	$(MAKE) -C userland CROSS_COMPILE=$(CROSS_COMPILE)
+
+$(USERLAND_BINS): userland
+
+# ---- initramfs (senza bisogno di root: usa gen_init_cpio del kernel) ----
+$(BUILD)/gen_init_cpio: | $(KSRC)/Makefile
+	mkdir -p $(BUILD)
+	cc -O2 -o $@ $(KSRC)/usr/gen_init_cpio.c
+
+$(OUT)/initramfs.cpio.gz: userland $(BUILD)/gen_init_cpio scripts/initramfs.list $(FONTS)
+	mkdir -p $(OUT)
+	$(BUILD)/gen_init_cpio scripts/initramfs.list > $(BUILD)/initramfs.cpio
+	gzip -9 -c $(BUILD)/initramfs.cpio > $@
+
+initramfs: $(OUT)/initramfs.cpio.gz
+
+# ---- emulatore ----
+run: all
+	./scripts/run-qemu.sh
+
+run-serial: all
+	./scripts/run-qemu.sh --serial
+
+clean:
+	$(MAKE) -C userland clean
+	rm -rf $(OUT) $(BUILD)/initramfs.cpio $(BUILD)/gen_init_cpio
+
+.PHONY: all kernel kernel-menuconfig userland initramfs run run-serial clean

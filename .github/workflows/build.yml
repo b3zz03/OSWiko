@@ -1,0 +1,36 @@
+name: Build OSWiko
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Strumenti di compilazione
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu flex bison bc libssl-dev libelf-dev
+
+      - name: Cache del kernel
+        uses: actions/cache@v4
+        with:
+          path: build/linux
+          key: kernel-${{ hashFiles('Makefile', 'kernel/qemu.config') }}
+
+      - name: Compila
+        run: make JOBS=$(nproc)
+
+      - name: Prepara il pacchetto per l'emulatore
+        run: |
+          mkdir dist
+          cp out/Image out/initramfs.cpio.gz scripts/run-qemu.bat scripts/run-qemu.sh dist/
+          sed -i 's|out/||g; s|cd "$(dirname "$0")/.."|cd "$(dirname "$0")"|' dist/run-qemu.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oswiko-emulatore
+          path: dist/
