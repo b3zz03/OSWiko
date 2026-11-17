@@ -17,11 +17,13 @@ struct app {
 	void (*event)(const struct event *ev);  /* tocco o tasto */
 	void (*timer)(void);                    /* scadenza di ui_timer() */
 	void (*close)(void);                    /* opzionale: all'uscita */
+	void (*init)(void);                     /* opzionale: all'avvio del sistema */
 	int light;                              /* sfondo chiaro: barra di stato scura */
+	int badge;                              /* numero sul pallino rosso (0 = niente) */
 };
 
 extern struct app app_clock, app_calc, app_paint, app_memory, app_bubbles,
-	app_torch, app_settings, app_jump, app_runner;
+	app_torch, app_settings, app_jump, app_runner, app_chat;
 
 /* Servizi per le app */
 void ui_redraw(void);              /* chiede di ridisegnare lo schermo */
@@ -30,6 +32,10 @@ void ui_go_home(void);
 void ui_power(int reboot);         /* spegne (0) o riavvia (1) */
 long long ui_now_ms(void);
 int  ui_status_h(void);            /* altezza barra di stato in pixel */
+int  ui_is_open(struct app *a);    /* l'app è in primo piano? */
+void ui_watch_fd(int fd, void (*cb)(int fd)); /* chiama cb quando fd è leggibile */
+void ui_notify(struct app *a, const char *title, const char *text); /* banner */
+void ui_badges_changed(void);
 
 /* Elementi grafici comuni */
 void ui_status_bar(int dark_text);
@@ -45,6 +51,9 @@ void sys_kernel(char *buf, int n);
 void sys_memory(long *total_mb, long *free_mb);
 long sys_uptime(void);
 int  sys_cpus(void);
+
+/* Testo accorciato con "…" per stare in maxw pixel */
+void text_fit(const char *s, int px, enum font_weight w, int maxw, char *out, int n);
 
 /* Numeri casuali semplici */
 unsigned ui_rand(void);

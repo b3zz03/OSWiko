@@ -16,7 +16,7 @@
 
 static struct app *grid_apps[] = { &app_runner, &app_jump, &app_bubbles, &app_memory,
 				    &app_clock, &app_calc };
-static struct app *dock_apps[] = { &app_paint, &app_torch, &app_settings };
+static struct app *dock_apps[] = { &app_chat, &app_paint, &app_torch, &app_settings };
 #define N_GRID ((int)(sizeof(grid_apps) / sizeof(grid_apps[0])))
 #define N_DOCK ((int)(sizeof(dock_apps) / sizeof(dock_apps[0])))
 
@@ -31,6 +31,15 @@ static struct image frame;   /* home pre-renderizzata per le animazioni */
 static int pressed = -1;     /* icona premuta sulla home */
 static int drag_y0 = -1, drag_dy;
 static int gesture_y0 = -1;
+
+/* file sorvegliati (es. inotify dei messaggi) */
+static struct { int fd; void (*cb)(int); } watches[4];
+static int n_watches;
+
+/* banner di notifica */
+static struct app *banner_app;
+static char banner_title[64], banner_text[256];
+static long long banner_until;
 
 static const char *giorni[] = { "domenica", "lunedì", "martedì", "mercoledì",
 				"giovedì", "venerdì", "sabato" };
@@ -57,6 +66,51 @@ unsigned ui_rand(void)
 }
 
 void ui_redraw(void) { need_redraw = 1; }
+int ui_is_open(struct app *a) { return st == ST_APP && cur == a; }
+void ui_badges_changed(void) { if (st == ST_HOME) need_redraw = 1; }
+
+void ui_watch_fd(int fd, void (*cb)(int))
+{
+	if (n_watches < 4) {
+		watches[n_watches].fd = fd;
+		watches[n_watches].cb = cb;
+		n_watches++;
+		input_watch_fd(fd);
+	}
+}
+
+void ui_notify(struct app *a, const char *title, const char *text)
+{
+	banner_app = a;
+	snprintf(banner_title, sizeof(banner_title), "%s", title);
+	snprintf(banner_text, sizeof(banner_text), "%s", text);
+	for (char *p = banner_text; *p; p++)
+		if (*p == '\n')
+			*p = ' ';
+	banner_until = ui_now_ms() + 4500;
+	need_redraw = 1;
+}
+
+void text_fit(const char *s, int px, enum font_weight w, int maxw, char *out, int n)
+{
+	snprintf(out, n, "%s", s);
+	if (text_width(out, px, w) <= maxw)
+		return;
+	int len = strlen(out);
+	while (len > 0) {
+		/* togli un carattere UTF-8 intero */
+		do
+			len--;
+		while (len > 0 && (out[len] & 0xc0) == 0x80);
+		out[len] = 0;
+		char tmp[512];
+		snprintf(tmp, sizeof(tmp), "%s…", out);
+		if (text_width(tmp, px, w) <= maxw) {
+			snprintf(out, n, "%s", tmp);
+			return;
+		}
+	}
+}
 void ui_timer(int ms) { timer_at = ms > 0 ? ui_now_ms() + ms : 0; }
 int ui_status_h(void) { return P(44); }
 
@@ -127,6 +181,36 @@ static void draw_icon(struct app *a, int x, int y, int s, int is_pressed)
 		a->icon(x, y, s);
 	if (is_pressed)
 		gfx_rrect(x, y, s, s, r, BLACK, 90);
+	if (a->badge > 0) {
+		char b[8];
+		snprintf(b, sizeof(b), "%d", a->badge > 99 ? 99 : a->badge);
+		int bw = text_width(b, P(14), FONT_SEMIBOLD) + P(12);
+		if (bw < P(22))
+			bw = P(22);
+		gfx_rrect(x + s - bw + P(6), y - P(6), bw, P(22), P(11), RGB(255, 59, 48), 255);
+		text_center(x + s - bw / 2 + P(6), y - P(4), b, P(14), FONT_SEMIBOLD, WHITE, 255);
+	}
+}
+
+/* Banner di notifica in alto, sopra a tutto */
+static void draw_banner(void)
+{
+	if (!banner_app || ui_now_ms() >= banner_until || st == ST_OFF)
+		return;
+	int x = P(8), y = P(8), w = G.w - P(16), h = P(70);
+	char line[256];
+	gfx_shadow(x, y, w, h, P(20), P(8), 70);
+	gfx_rrect(x, y, w, h, P(20), RGB(250, 250, 252), 245);
+	int s = P(38);
+	int badge = banner_app->badge;
+	banner_app->badge = 0; /* niente pallino rosso dentro il banner */
+	draw_icon(banner_app, x + P(14), y + (h - s) / 2, s, 0);
+	banner_app->badge = badge;
+	int tx = x + P(14) + s + P(12), tw = w - (tx - x) - P(14);
+	text_fit(banner_title, P(15), FONT_SEMIBOLD, tw, line, sizeof(line));
+	text_draw(tx, y + P(14), line, P(15), FONT_SEMIBOLD, BLACK, 255);
+	text_fit(banner_text, P(15), FONT_REGULAR, tw, line, sizeof(line));
+	text_draw(tx, y + P(36), line, P(15), FONT_REGULAR, RGB(60, 60, 67), 255);
 }
 
 /* Posizione dell'icona i (prima la griglia, poi il dock). */
@@ -210,6 +294,7 @@ static void draw(void)
 		ui_home_indicator(cur->light);
 		break;
 	}
+	draw_banner();
 }
 
 /* Animazione "zoom" dall'icona allo schermo intero (o al contrario). */
@@ -342,8 +427,35 @@ static void lock_touch(const struct event *ev)
 	}
 }
 
+static void open_app(struct app *a);
+
 static void dispatch(const struct event *ev)
 {
+	if (ev->type == IN_FD) {
+		for (int i = 0; i < n_watches; i++)
+			if (watches[i].fd == ev->code)
+				watches[i].cb(ev->code);
+		return;
+	}
+	if (ev->type == IN_KEY_UP || ev->type == IN_KEY_REPEAT) {
+		if (st == ST_APP && cur->event)
+			cur->event(ev);
+		return;
+	}
+	/* tocco sul banner: apre l'app che l'ha mandato */
+	if (ev->type == IN_TOUCH_DOWN && banner_app && ui_now_ms() < banner_until &&
+	    st != ST_OFF && ev->y < P(80)) {
+		struct app *a = banner_app;
+		banner_until = 0;
+		if (st == ST_APP && cur != a)
+			ui_go_home();
+		if (st != ST_APP || cur != a) {
+			st = ST_HOME;
+			open_app(a);
+		}
+		need_redraw = 1;
+		return;
+	}
 	if (ev->type == IN_KEY) {
 		switch (ev->code) {
 		case KEY_POWER:
@@ -435,7 +547,15 @@ int main(void)
 		return 1;
 	make_wallpaper();
 
+	for (int i = 0; i < N_GRID; i++)
+		if (grid_apps[i]->init)
+			grid_apps[i]->init();
+	for (int i = 0; i < N_DOCK; i++)
+		if (dock_apps[i]->init)
+			dock_apps[i]->init();
+
 	int last_min = -1;
+	int banner_shown = 0;
 	for (;;) {
 		if (need_redraw) {
 			need_redraw = 0;
@@ -463,6 +583,15 @@ int main(void)
 		int timeout = 1000 - (int)(now % 1000);
 		if (timer_at && timer_at - now < timeout)
 			timeout = timer_at > now ? (int)(timer_at - now) : 0;
+		if (banner_until > now) {
+			banner_shown = 1;
+			if (banner_until - now < timeout)
+				timeout = (int)(banner_until - now) + 1;
+		} else if (banner_shown) {
+			banner_shown = 0; /* il banner è scaduto: togli */
+			need_redraw = 1;
+			continue;
+		}
 
 		struct event ev;
 		if (input_wait(&ev, timeout)) {

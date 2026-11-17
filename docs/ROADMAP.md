@@ -10,6 +10,7 @@ Obiettivo: un sistema operativo completo per il Wiko Ridge 4G, da dare a un bamb
 - [x] App: Orologio, Calcolatrice, Disegno, Memory, Bolle, Torcia, Impostazioni
 - [x] Giochi: Balzo (platform a un tasto), Volpe in Fuga (corsa infinita 3D a 3 corsie)
 - [x] Ottimizzazioni grafiche: cerchi a tratti, poligoni ritagliati allo schermo, terreno 3D a scanline
+- [x] Messaggi via bot Telegram: servizio msgd (HTTPS/mbedTLS), abbinamento con codice, chat, tastiera a schermo, notifiche e badge
 - [x] Build automatica su GitHub e avvio su Windows
 
 ## Fase 2 - Sul telefono vero
@@ -49,7 +50,7 @@ Il codice dell'interfaccia è già pronto per il telefono: usa `/dev/fb0`, il to
 - [ ] Disegno diretto nei buffer DRM con doppio buffer (page flip): elimina la copia di ogni fotogramma
 - [ ] Ottimizzazioni NEON per riempimenti e fusioni
 - [ ] Salvataggio dei record dei giochi su /data
-- [ ] App per comunicare (da progettare: messaggi tra dispositivi OSWiko? chiamate?)
+- [ ] Messaggi: emoji (font monocromatico), foto ricevute, messaggi vocali, più contatti
 - [ ] Accelerazione GPU (Adreno 306, driver freedreno) se servirà; per ora la CPU basta
 
 ## E il Play Store?

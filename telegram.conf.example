@@ -1,0 +1,7 @@
+# OSWiko - configurazione dei Messaggi (bot Telegram)
+# Copia questo file in "telegram.conf" (stessa cartella di run-qemu) e metti il token.
+# Il token si ottiene su Telegram da @BotFather con il comando /newbot.
+# NON caricare mai telegram.conf su GitHub: chi ha il token controlla il bot.
+token=123456789:INCOLLA-QUI-IL-TOKEN
+# facoltativo: il nome che tuo fratello vede in cima alla chat
+name=Fabio

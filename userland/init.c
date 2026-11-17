@@ -19,6 +19,7 @@
 
 #define UI_PATH    "/bin/ui"
 #define SHELL_PATH "/bin/osh"
+#define MSGD_PATH  "/bin/msgd"
 
 static void log_msg(const char *msg)
 {
@@ -100,6 +101,8 @@ int main(void)
 	mount_fs("devtmpfs", "/dev", "devtmpfs", MS_NOSUID);
 	mount_fs("tmpfs", "/tmp", "tmpfs", MS_NOSUID | MS_NODEV);
 	mount_fs("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV);
+	/* dati utente: per ora in RAM; sul telefono sarà la partizione userdata */
+	mount_fs("tmpfs", "/data", "tmpfs", MS_NOSUID | MS_NODEV);
 	if (sethostname("oswiko", 6) < 0)
 		perror("sethostname");
 	setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
@@ -120,6 +123,7 @@ int main(void)
 	pid_t ui = spawn(UI_PATH, 0);
 	log_msg("avvio shell (digita 'help')");
 	pid_t sh = spawn(SHELL_PATH, 1);
+	pid_t msgd = spawn(MSGD_PATH, 0);
 
 	/* Raccoglie i processi terminati e riavvia quelli di sistema. */
 	for (;;) {
@@ -137,6 +141,9 @@ int main(void)
 		} else if (pid == sh) {
 			sleep(1);
 			sh = spawn(SHELL_PATH, 1);
+		} else if (pid == msgd) {
+			sleep(5);
+			msgd = spawn(MSGD_PATH, 0);
 		}
 	}
 }

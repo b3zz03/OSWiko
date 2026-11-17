@@ -6,6 +6,11 @@ dir /proc 0755 0 0
 dir /sys 0755 0 0
 dir /tmp 1777 0 0
 dir /run 0755 0 0
+dir /data 0755 0 0
+dir /etc 0755 0 0
+dir /etc/ssl 0755 0 0
+slink /etc/resolv.conf /proc/net/pnp 0777 0 0
+file /etc/ssl/cacert.pem assets/certs/cacert.pem 0644 0 0
 dir /bin 0755 0 0
 dir /usr 0755 0 0
 dir /usr/share 0755 0 0
@@ -13,6 +18,7 @@ dir /usr/share/fonts 0755 0 0
 file /init build/userland/init 0755 0 0
 file /bin/ui build/userland/ui 0755 0 0
 file /bin/osh build/userland/osh 0755 0 0
+file /bin/msgd build/userland/msgd 0755 0 0
 file /usr/share/fonts/Inter-Light.otf assets/fonts/Inter-Light.otf 0644 0 0
 file /usr/share/fonts/Inter-Regular.otf assets/fonts/Inter-Regular.otf 0644 0 0
 file /usr/share/fonts/Inter-SemiBold.otf assets/fonts/Inter-SemiBold.otf 0644 0 0

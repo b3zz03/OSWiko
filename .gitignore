@@ -1,2 +1,4 @@
 /build/
 /out/
+# contiene il token del bot: non va mai su GitHub
+telegram.conf

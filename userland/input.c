@@ -24,6 +24,13 @@ struct dev {
 
 static struct dev devs[MAX_DEV];
 static int ndev;
+static int extra_fd[4], n_extra;
+
+void input_watch_fd(int fd)
+{
+	if (n_extra < 4)
+		extra_fd[n_extra++] = fd;
+}
 static int scr_w, scr_h;
 
 static struct event queue[QUEUE];
@@ -131,8 +138,9 @@ static void handle(struct dev *v, const struct input_event *e)
 	case EV_KEY:
 		if (e->code == BTN_TOUCH || e->code == BTN_LEFT) {
 			v->down = e->value != 0;
-		} else if (e->value == 1 && e->code < BTN_MISC) {
-			push(IN_KEY, 0, 0, e->code);
+		} else if (e->code < BTN_MISC) {
+			push(e->value == 1 ? IN_KEY : e->value == 2 ? IN_KEY_REPEAT : IN_KEY_UP,
+			     0, 0, e->code);
 		}
 		break;
 	case EV_SYN:
@@ -154,15 +162,20 @@ static void handle(struct dev *v, const struct input_event *e)
 
 int input_wait(struct event *ev, int timeout_ms)
 {
-	struct pollfd pfd[MAX_DEV];
+	struct pollfd pfd[MAX_DEV + 4];
 
 	if (pop(ev))
 		return 1;
 	for (int i = 0; i < ndev; i++)
 		pfd[i] = (struct pollfd){ .fd = devs[i].fd, .events = POLLIN };
+	for (int i = 0; i < n_extra; i++)
+		pfd[ndev + i] = (struct pollfd){ .fd = extra_fd[i], .events = POLLIN };
 
-	if (poll(pfd, ndev, timeout_ms) <= 0)
+	if (poll(pfd, ndev + n_extra, timeout_ms) <= 0)
 		return 0;
+	for (int i = 0; i < n_extra; i++)
+		if (pfd[ndev + i].revents & POLLIN)
+			push(IN_FD, 0, 0, extra_fd[i]);
 
 	for (int i = 0; i < ndev; i++) {
 		struct input_event buf[32];

@@ -12,7 +12,10 @@ enum ev_type {
 	IN_TOUCH_DOWN,
 	IN_TOUCH_MOVE,
 	IN_TOUCH_UP,
-	IN_KEY,  /* code = KEY_* di <linux/input-event-codes.h> */
+	IN_KEY,        /* tasto premuto: code = KEY_* di <linux/input-event-codes.h> */
+	IN_KEY_REPEAT, /* tasto tenuto premuto (ripetizione) */
+	IN_KEY_UP,     /* tasto rilasciato */
+	IN_FD,         /* un file sorvegliato è leggibile: code = fd */
 };
 
 struct event {
@@ -25,6 +28,7 @@ int  input_init(int screen_w, int screen_h);
 /* Attende fino a timeout_ms (-1 = per sempre). Ritorna 1 se c'è un evento. */
 int  input_wait(struct event *ev, int timeout_ms);
 int  input_count(void);
+void input_watch_fd(int fd);   /* aggiunge un fd (es. inotify) al ciclo eventi */
 const char *input_name(int i);
 
 #endif
