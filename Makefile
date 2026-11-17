@@ -21,7 +21,7 @@ KCONFIG := kernel/qemu.config
 USERLAND_BINS := $(BUILD)/userland/init $(BUILD)/userland/ui $(BUILD)/userland/osh $(BUILD)/userland/msgd
 FONTS := $(wildcard assets/fonts/*.otf)
 
-all: $(OUT)/Image $(OUT)/initramfs.cpio.gz
+all: $(OUT)/Image $(OUT)/initramfs.cpio.gz $(OUT)/data-vuoto.img
 
 # ---- kernel ----
 $(KSRC)/Makefile:
@@ -67,6 +67,13 @@ $(OUT)/initramfs.cpio.gz: userland $(BUILD)/gen_init_cpio scripts/initramfs.list
 	gzip -9 -c $(BUILD)/initramfs.cpio > $@
 
 initramfs: $(OUT)/initramfs.cpio.gz
+
+# ---- disco dati vuoto (ext4) per l'emulatore: diventa /data ----
+$(OUT)/data-vuoto.img:
+	mkdir -p $(OUT)
+	rm -f $@
+	truncate -s 256M $@
+	mkfs.ext4 -q -F -L oswiko-data $@
 
 # ---- emulatore ----
 run: all

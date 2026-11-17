@@ -11,6 +11,8 @@ Obiettivo: un sistema operativo completo per il Wiko Ridge 4G, da dare a un bamb
 - [x] Giochi: Balzo (platform a un tasto), Volpe in Fuga (corsa infinita 3D a 3 corsie)
 - [x] Ottimizzazioni grafiche: cerchi a tratti, poligoni ritagliati allo schermo, terreno 3D a scanline
 - [x] Messaggi via bot Telegram: servizio msgd (HTTPS/mbedTLS), abbinamento con codice, chat, tastiera a schermo, notifiche e badge
+- [x] Memoria permanente nell'emulatore (disco ext4 data.img su /data): chat, collegamento, record, foto
+- [x] Fotocamera (V4L2 o virtuale), Galleria, foto nella chat in entrambe le direzioni, Disegno salva in Galleria
 - [x] Build automatica su GitHub e avvio su Windows
 
 ## Fase 2 - Sul telefono vero
@@ -23,7 +25,8 @@ Serve un **cavo micro-USB dati** (quelli che fanno solo ricarica non vanno bene)
 - [ ] Kernel [msm8916-mainline](https://github.com/msm8916-mainline/linux) con un device tree per il Ridge 4G, ricavato dal kernel Android originale e da telefoni simili già supportati
 - [ ] `kernel/wiko-ridge.config`, come `qemu.config` ma per il telefono
 - [ ] Verifica display, touch, tasti (Power, Volume), batteria, retroilluminazione
-- [ ] Partizione `userdata` come `/data` (ext4) per salvare disegni, record, impostazioni
+- [ ] Partizione `userdata` come `/data` (ext4): stesso meccanismo del disco dell'emulatore (`oswiko.data=` sulla riga di comando del kernel)
+- [ ] Fotocamera: serve un driver per il sensore del Ridge 4G (il chip, CAMSS, è supportato; il sensore va verificato). L'app usa già V4L2
 - [ ] Sospensione: con lo schermo spento il telefono deve consumare quasi niente
 
 Il codice dell'interfaccia è già pronto per il telefono: usa `/dev/fb0`, il touchscreen multitouch, i tasti Power e Volume e la retroilluminazione da `/sys/class/backlight`.
@@ -50,7 +53,7 @@ Il codice dell'interfaccia è già pronto per il telefono: usa `/dev/fb0`, il to
 - [ ] Disegno diretto nei buffer DRM con doppio buffer (page flip): elimina la copia di ogni fotogramma
 - [ ] Ottimizzazioni NEON per riempimenti e fusioni
 - [ ] Salvataggio dei record dei giochi su /data
-- [ ] Messaggi: emoji (font monocromatico), foto ricevute, messaggi vocali, più contatti
+- [ ] Messaggi: emoji (font monocromatico), messaggi vocali, più contatti
 - [ ] Accelerazione GPU (Adreno 306, driver freedreno) se servirà; per ora la CPU basta
 
 ## E il Play Store?

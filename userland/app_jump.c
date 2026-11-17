@@ -124,8 +124,10 @@ static void die(void)
 					  1, i % 2 ? RGB(255, 170, 40) : WHITE };
 	}
 	int m = (int)px;
-	if (m > best_m)
+	if (m > best_m) {
 		best_m = m;
+		sys_save_int("balzo.record", best_m);
+	}
 }
 
 static int over_gap(float x)
@@ -213,6 +215,7 @@ static void open_(void)
 	reset();
 	started = 0;
 	attempt = 1;
+	best_m = sys_load_int("balzo.record", 0);
 	last_ms = ui_now_ms();
 	ui_timer(FRAME_MS);
 }

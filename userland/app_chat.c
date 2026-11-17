@@ -6,6 +6,7 @@
  */
 #include "keyboard.h"
 #include "msg.h"
+#include "photos.h"
 #include "ui.h"
 
 #include <fcntl.h>
@@ -29,6 +30,11 @@ struct msg {
 	char dir;          /* 'I' ricevuto, 'O' inviato */
 	int pending;       /* scritto ma non ancora inviato */
 	char *text;
+	/* foto: il testo è "\x01photo:<percorso>" */
+	int photo;
+	char path[128];
+	struct image img;    /* caricata solo quando serve */
+	int sy;              /* ultima posizione sullo schermo (per i tocchi) */
 	/* impaginazione (calcolata una volta) */
 	int nlines, bw, bh;
 	short start[MAX_LINES], len[MAX_LINES];
@@ -97,8 +103,22 @@ static int wrap(const char *s, int maxw, short *start, short *len, int maxl)
 	return n ? n : 1;
 }
 
+#define PHOTO_TAG "\x01photo:"
+
 static void layout_msg(struct msg *m)
 {
+	if (!strncmp(m->text, PHOTO_TAG, strlen(PHOTO_TAG))) {
+		int iw = 4, ih = 3;
+		m->photo = 1;
+		snprintf(m->path, sizeof(m->path), "%s", m->text + strlen(PHOTO_TAG));
+		img_info(m->path, &iw, &ih);
+		m->bw = G.w * 60 / 100;
+		m->bh = iw > 0 ? m->bw * ih / iw : m->bw;
+		if (m->bh > P(320)) m->bh = P(320);
+		if (m->bh < P(110)) m->bh = P(110);
+		m->nlines = 0;
+		return;
+	}
 	int maxw = G.w * 70 / 100 - P(28);
 	m->nlines = wrap(m->text, maxw, m->start, m->len, MAX_LINES);
 	if (m->text[0] == 0) {
@@ -139,6 +159,7 @@ static void add_msg(const char *id, long ts, char dir, int pending, const char *
 {
 	if (n_msgs == MAX_MSG) { /* tieni solo gli ultimi */
 		free(msgs[0].text);
+		img_free(&msgs[0].img);
 		memmove(msgs, msgs + 1, sizeof(msgs[0]) * (MAX_MSG - 1));
 		n_msgs--;
 	}
@@ -167,8 +188,10 @@ static void load(void)
 	char line[8400];
 	FS = P(16);
 	LH = P(21);
-	for (int i = 0; i < n_msgs; i++)
+	for (int i = 0; i < n_msgs; i++) {
 		free(msgs[i].text);
+		img_free(&msgs[i].img);
+	}
 	n_msgs = 0;
 	total_in = 0;
 	read_state();
@@ -224,7 +247,7 @@ static void on_change(int fd)
 		} else {
 			for (int i = n_msgs - 1; i >= 0; i--)
 				if (msgs[i].dir == 'I') {
-					ui_notify(&app_chat, name, msgs[i].text);
+					ui_notify(&app_chat, name, msgs[i].photo ? "Foto" : msgs[i].text);
 					break;
 				}
 		}
@@ -288,6 +311,7 @@ static void send_input(void)
 	if (fd >= 0) {
 		if (write(fd, line, n) < 0)
 			perror("chat: outbox");
+		fsync(fd);
 		close(fd);
 	}
 	input[0] = 0;
@@ -303,8 +327,8 @@ static int header_bottom(void) { return P(102); }
 
 static void field_geom(int *fx, int *fw, int *fh, int *nl, short *st, short *ln)
 {
-	*fx = P(12);
-	*fw = G.w - P(12) - P(56);
+	*fx = P(52);
+	*fw = G.w - P(52) - P(56);
 	FS = P(16);
 	LH = P(21);
 	*nl = input[0] ? wrap(input, *fw - P(28), st, ln, 12) : 1;
@@ -403,7 +427,21 @@ static void draw(void)
 			y += P(3);
 		}
 		int sy = base + y;
-		if (sy + m->bh > hb - P(40) && sy < bt) {
+		m->sy = sy;
+		if (m->photo && sy + m->bh > hb - P(40) && sy < bt) {
+			int out = m->dir == 'O';
+			int bx = out ? G.w - P(12) - m->bw : P(12);
+			if (!m->img.px)
+				img_load_file(&m->img, m->path, m->bw * 2, m->bh * 2);
+			if (m->img.px)
+				gfx_image(&m->img, bx, sy, m->bw, m->bh, 1, P(16));
+			else
+				gfx_rrect(bx, sy, m->bw, m->bh, P(16), GRAYB, 255);
+			if (m->pending) {
+				gfx_rrect(bx, sy, m->bw, m->bh, P(16), WHITE, 110);
+				text_right(G.w - P(16), sy + m->bh + P(2), "invio…", P(11), FONT_REGULAR, SUBTLE, 255);
+			}
+		} else if (!m->photo && sy + m->bh > hb - P(40) && sy < bt) {
 			int out = m->dir == 'O';
 			int bx = out ? G.w - P(12) - m->bw : P(12);
 			int r = m->bh / 2 < P(18) ? m->bh / 2 : P(18);
@@ -501,6 +539,11 @@ static void draw(void)
 			if ((ui_now_ms() / 500) % 2 == 0)
 				gfx_rect(cxp, fy + P(9) + shown * LH, P(2), LH - P(2), BLUE, 255);
 		}
+		/* pulsante foto (apre la Galleria) */
+		float px = P(28), py = fy + fh - P(18);
+		gfx_rrect((int)(px - P(12)), (int)(py - P(9)), P(24), P(18), P(4), BLUE, 255);
+		gfx_circle(px, py, P(5), WHITE, 255);
+		gfx_circle(px, py, P(3), BLUE, 255);
 		/* pulsante invia */
 		float bx = G.w - P(32), by = fy + fh - P(18);
 		gfx_circle(bx, by, P(16), input[0] ? BLUE : RGB(200, 200, 205), 255);
@@ -582,6 +625,10 @@ static void event(const struct event *ev)
 			return;
 		}
 		if (paired() && ev->y >= bar_top() && (!focused || ev->y < kb_top())) {
+			if (ev->x < P(48)) {
+				ui_open(&app_gallery);
+				return;
+			}
 			if (ev->x > G.w - P(56)) {
 				send_input();
 			} else if (!focused) {
@@ -610,6 +657,18 @@ static void event(const struct event *ev)
 		}
 		break;
 	case IN_TOUCH_UP:
+		if (drag_y0 >= 0 && !dragged) {
+			for (int i = 0; i < n_msgs; i++) {
+				struct msg *m = &msgs[i];
+				int bx = m->dir == 'O' ? G.w - P(12) - m->bw : P(12);
+				if (m->photo && ev->x >= bx && ev->x < bx + m->bw &&
+				    ev->y >= m->sy && ev->y < m->sy + m->bh) {
+					drag_y0 = -1;
+					gallery_show(m->path);
+					return;
+				}
+			}
+		}
 		if (drag_y0 >= 0 && !dragged && focused) {
 			focused = 0; /* tocco sui messaggi: chiudi la tastiera */
 			ui_redraw();
@@ -624,6 +683,22 @@ static void event(const struct event *ev)
 static void close_(void)
 {
 	focused = 0;
+	for (int i = 0; i < n_msgs; i++)
+		img_free(&msgs[i].img); /* libera la memoria delle foto */
+}
+
+/* ---- usate dalla Galleria ---- */
+
+int chat_can_send(void) { return paired(); }
+const char *chat_contact(void) { return name; }
+
+void chat_send_photo(const char *path)
+{
+	char draft[sizeof(input)];
+	memcpy(draft, input, sizeof(input)); /* non perdere quello che stavi scrivendo */
+	snprintf(input, sizeof(input), PHOTO_TAG "%s", path);
+	send_input();
+	memcpy(input, draft, sizeof(input));
 }
 
 static void icon(int x, int y, int s)

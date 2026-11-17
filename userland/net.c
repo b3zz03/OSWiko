@@ -16,7 +16,7 @@
 #include "mbedtls/x509_crt.h"
 #include "psa/crypto.h"
 
-#define MAX_RESPONSE (1 << 20)
+#define MAX_RESPONSE (16 << 20) /* le foto ricevute possono essere grandi */
 
 static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
 static int inited;
@@ -78,8 +78,8 @@ static size_t dechunk(char *b, size_t n)
 }
 
 int https_request(const struct https_target *t, const char *method,
-		  const char *path, const char *body, int timeout_s,
-		  char **body_out)
+		  const char *path, const void *body, size_t blen,
+		  const char *ctype, int timeout_s, char **body_out, size_t *outlen)
 {
 	mbedtls_net_context fd;
 	mbedtls_ssl_context ssl;
@@ -89,6 +89,8 @@ int https_request(const struct https_target *t, const char *method,
 	int status = -1, r;
 
 	*body_out = NULL;
+	if (outlen)
+		*outlen = 0;
 	if (net_init(t->ca_file) < 0)
 		return -1;
 
@@ -122,16 +124,18 @@ int https_request(const struct https_target *t, const char *method,
 		}
 	}
 
-	size_t blen = body ? strlen(body) : 0;
-	size_t qlen = strlen(path) + strlen(t->host) + blen + 256;
+	size_t qlen = strlen(path) + strlen(t->host) + blen + 512;
 	req = malloc(qlen);
 	if (!req)
 		goto out;
 	int n = snprintf(req, qlen,
 			 "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: OSWiko\r\n"
-			 "Connection: close\r\nContent-Type: application/json\r\n"
-			 "Content-Length: %zu\r\n\r\n%s",
-			 method, path, t->host, blen, body ? body : "");
+			 "Connection: close\r\nContent-Type: %s\r\n"
+			 "Content-Length: %zu\r\n\r\n",
+			 method, path, t->host, ctype ? ctype : "application/json", blen);
+	if (blen)
+		memcpy(req + n, body, blen); /* può essere binario (foto) */
+	n += blen;
 	for (int off = 0; off < n;) {
 		r = mbedtls_ssl_write(&ssl, (unsigned char *)req + off, n - off);
 		if (r == MBEDTLS_ERR_SSL_WANT_READ || r == MBEDTLS_ERR_SSL_WANT_WRITE)
@@ -179,6 +183,8 @@ int https_request(const struct https_target *t, const char *method,
 	if (*body_out) {
 		memcpy(*body_out, b, bl);
 		(*body_out)[bl] = 0;
+		if (outlen)
+			*outlen = bl;
 	}
 
 out:

@@ -15,7 +15,7 @@
 #include <unistd.h>
 
 static struct app *grid_apps[] = { &app_runner, &app_jump, &app_bubbles, &app_memory,
-				    &app_clock, &app_calc };
+				    &app_camera, &app_gallery, &app_clock, &app_calc };
 static struct app *dock_apps[] = { &app_chat, &app_paint, &app_torch, &app_settings };
 #define N_GRID ((int)(sizeof(grid_apps) / sizeof(grid_apps[0])))
 #define N_DOCK ((int)(sizeof(dock_apps) / sizeof(dock_apps[0])))
@@ -341,6 +341,23 @@ static void open_app(struct app *a)
 	if (a->open)
 		a->open();
 	need_redraw = 1;
+}
+
+void ui_open(struct app *a)
+{
+	if (st == ST_APP && cur == a) {
+		if (a->open)
+			a->open();
+		need_redraw = 1;
+		return;
+	}
+	if (st == ST_APP) {
+		timer_at = 0;
+		if (cur->close)
+			cur->close();
+	}
+	st = ST_HOME;
+	open_app(a);
 }
 
 void ui_go_home(void)

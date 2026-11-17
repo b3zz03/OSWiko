@@ -56,6 +56,17 @@ void img_capture(struct image *im);          /* copia il back buffer */
 void img_blur(struct image *im, int radius); /* sfocatura (3 box blur) */
 void gfx_blit(const struct image *im);       /* immagine a pieno schermo */
 void gfx_blit_rrect(const struct image *im, int x, int y, int w, int h, int r);
+/* Disegna l'immagine scalata nel rettangolo: cover=1 riempie e ritaglia,
+ * cover=0 la fa stare tutta (bande ai lati). r = raggio degli angoli. */
+void gfx_image(const struct image *im, int x, int y, int w, int h, int cover, int r);
+uint32_t img_sample(const struct image *im, float x, float y); /* bilineare */
+
+/* image.c: file */
+void img_free(struct image *im);
+int  img_info(const char *path, int *w, int *h);
+int  img_load_file(struct image *im, const char *path, int max_w, int max_h);
+int  img_save_jpeg(const struct image *im, const char *path, int quality);
+int  img_resize_cover(const struct image *src, struct image *dst, int w, int h);
 
 /* Testo vettoriale (font Inter, anti-aliasing). y = bordo superiore. */
 enum font_weight { FONT_LIGHT, FONT_REGULAR, FONT_SEMIBOLD, FONT_COUNT };

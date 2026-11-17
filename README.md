@@ -6,6 +6,8 @@ Un sistema operativo fatto in casa per il **Wiko Ridge 4G** (Snapdragon 410, 2 G
 
 ![I giochi: Balzo e Volpe in Fuga](docs/screenshots/giochi.png)
 
+![Fotocamera, Galleria e foto nella chat](docs/screenshots/foto.png)
+
 Per ora gira nell'emulatore QEMU. Il porting sul telefono vero è la fase 2 (vedi [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ## Cosa c'è
@@ -17,10 +19,12 @@ Per ora gira nell'emulatore QEMU. Il porting sul telefono vero è la fase 2 (ved
 | **Gesture** | trascina dal bordo inferiore verso l'alto per tornare alla home |
 | **Volpe in Fuga** | corsa infinita in 3D su 3 corsie nel bosco: swipe per cambiare corsia, saltare i tronchi, scivolare sotto le staccionate; gemme da raccogliere |
 | **Balzo** | platform a un tasto: il cubo corre da solo, tocca per saltare spuntoni, blocchi e burroni; percorso fisso da imparare, record e tentativi |
-| **Messaggi** | chat stile WhatsApp con te tramite un bot Telegram: bolle, tastiera a schermo italiana, notifiche a banner e badge sull'icona |
+| **Messaggi** | chat stile WhatsApp con te tramite un bot Telegram: testo e **foto** (in entrambe le direzioni), tastiera a schermo italiana, notifiche a banner e badge sull'icona |
+| **Fotocamera** | scatta foto (videocamera vera se c'è, altrimenti fotocamera virtuale nell'emulatore) |
+| **Galleria** | griglia di miniature, foto a schermo intero con swipe, elimina, "Invia a…" nella chat |
 | **Orologio** | quadrante analogico con lancetta dei secondi + ora digitale |
 | **Calcolatrice** | stile iOS, funziona anche con la tastiera del PC |
-| **Disegno** | tela, 8 colori, 3 pennelli |
+| **Disegno** | tela, 8 colori, 3 pennelli, salva in Galleria |
 | **Memory** | trova le 8 coppie di forme |
 | **Bolle** | tocca le bolle che salgono (senza game over, pensato per i più piccoli) |
 | **Torcia** | schermo a piena luce, tocca per cambiare colore |
@@ -50,6 +54,9 @@ userland/
   keyboard.c     tastiera a schermo (italiano) e tastiera fisica
   msgd.c         servizio messaggi: long polling Telegram, abbinamento, invio
   net.c          client HTTPS minimale (mbedTLS)
+  image.c        JPEG/PNG (stb_image), ridimensionamento
+  photos.c       archivio foto in /data/photos con miniature
+  camera_v4l2.c  acquisizione dalla videocamera (V4L2)
   app_*.c        le app
 kernel/qemu.config   configurazione del kernel per l'emulatore
 scripts/             initramfs e script di avvio
@@ -60,6 +67,8 @@ scripts/             initramfs e script di avvio
 1. Installa QEMU: dal cmd lancia `winget install SoftwareFreedomConservancy.QEMU`, oppure scaricalo da <https://www.qemu.org/download/#windows>.
 2. Su GitHub apri la scheda **Actions** del repo, scegli l'ultima build verde e scarica l'artifact **oswiko-emulatore** (zip).
 3. Estrai lo zip e fai doppio clic su `run-qemu.bat`.
+
+Chat, foto e record dei giochi vengono salvati in **`data.img`**, il "disco" del telefono, che lo script crea la prima volta. Quando scarichi una versione nuova di OSWiko, **tieni il tuo `data.img`** (e `telegram.conf`): così non perdi niente.
 
 Comandi nell'emulatore: il **mouse** fa da dito (trascina per gli swipe), **ESC** = tasto Home, **F12** = tasto Power, **Invio** sblocca. Nei giochi funzionano anche le **frecce** e la **barra spaziatrice**. Nella finestra del cmd c'è la shell `osh` (digita `help`).
 
@@ -76,7 +85,7 @@ Tuo fratello scrive dall'app **Messaggi** di OSWiko. Tu ricevi e rispondi dalla 
 
 Il bot accetta messaggi **solo da te**. Chiunque altro gli scriva viene ignorato.
 
-Per ora foto, vocali e sticker arrivano come testo segnaposto (es. "[📷 Foto]"), e le emoji non si vedono perché il font non le contiene.
+Le foto viaggiano in entrambe le direzioni: quelle che ricevi finiscono anche in Galleria. Per mandarne una, aprila in Galleria e tocca **Invia a…** (o usa il pulsante foto nella chat). Vocali e sticker arrivano ancora come testo segnaposto, e le emoji non si vedono perché il font non le contiene.
 
 Per provarlo senza internet c'è un finto server Telegram: `./tools/mock-telegram.sh` e poi `./tools/run-mock-qemu.sh`.
 
@@ -102,4 +111,4 @@ La prima volta `make` scarica il sorgente del kernel (~250 MB) e lo compila (poc
 
 ## Licenze
 
-Codice OSWiko: da definire. Font Inter: SIL OFL 1.1 (`assets/fonts/OFL.txt`). stb_truetype: pubblico dominio / MIT. jsmn: MIT. mbedTLS: Apache-2.0 (scaricato durante la build). Certificati CA (`assets/certs/cacert.pem`, da Mozilla via certifi): MPL-2.0. Kernel Linux: GPL-2.0.
+Codice OSWiko: da definire. Font Inter: SIL OFL 1.1 (`assets/fonts/OFL.txt`). stb_truetype, stb_image, stb_image_write: pubblico dominio / MIT. jsmn: MIT. mbedTLS: Apache-2.0 (scaricato durante la build). Certificati CA (`assets/certs/cacert.pem`, da Mozilla via certifi): MPL-2.0. Kernel Linux: GPL-2.0.

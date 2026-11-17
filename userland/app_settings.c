@@ -72,12 +72,13 @@ static void draw(void)
 	row(y, 3, 0, "Schermo", scr);
 	row(y, 4, 1, "Batteria", bat);
 
-	y = group(y + 5 * row_h() + P(14), "SISTEMA", 3);
+	y = group(y + 5 * row_h() + P(14), "SISTEMA", 4);
 	row(y, 0, 0, "Versione", "OSWiko " OSWIKO_VERSION);
 	row(y, 1, 0, "Kernel", kernel);
-	row(y, 2, 1, "Acceso da", up);
+	row(y, 2, 0, "Acceso da", up);
+	row(y, 3, 1, "Salvataggio", sys_data_volatile() ? "Temporaneo" : "Su disco");
 
-	y = group(y + 3 * row_h() + P(14), "LUMINOSITÀ", 1);
+	y = group(y + 4 * row_h() + P(14), "LUMINOSITÀ", 1);
 	int bl = sys_backlight_get();
 	slider_x0 = P(40);
 	slider_x1 = G.w - P(40);

@@ -135,6 +135,7 @@ static void append_log(const char *id, long ts, char dir, const char *text)
 		/* una sola write: la riga arriva intera anche con due scrittori */
 		if (write(fd, line, n) < 0)
 			perror("msgd: log");
+		fsync(fd); /* il messaggio è sul disco prima di mostrarlo */
 		close(fd);
 	}
 }
@@ -234,13 +235,100 @@ static void json_escape(const char *in, char *out, int n)
 
 /* ---------------- Telegram ---------------- */
 
-static int api(const char *method, const char *body, int timeout, char **resp)
+#define PHOTO_TAG "\x01photo:"
+#define PHOTO_DIR "/data/photos"
+
+static struct https_target target(void)
 {
-	char path[256];
 	struct https_target t = { cfg.api_host, cfg.api_ip[0] ? cfg.api_ip : NULL,
 				  cfg.api_port, cfg.ca };
+	return t;
+}
+
+static int api(const char *method, const char *body, int timeout, char **resp)
+{
+	char path[512];
+	struct https_target t = target();
 	snprintf(path, sizeof(path), "/bot%s/%s", cfg.token, method);
-	return https_request(&t, body ? "POST" : "GET", path, body, timeout, resp);
+	return https_request(&t, body ? "POST" : "GET", path, body, body ? strlen(body) : 0,
+			     NULL, timeout, resp, NULL);
+}
+
+/* Invia una foto (upload "multipart/form-data", come un modulo web). */
+static int send_photo(long long chat, const char *file)
+{
+	FILE *f = fopen(file, "rb");
+	if (!f)
+		return 200; /* foto cancellata nel frattempo: non riprovare all'infinito */
+	fseek(f, 0, SEEK_END);
+	long n = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	const char *B = "OSWikoConfine7a9c";
+	char head[512], tail[64];
+	int hl = snprintf(head, sizeof(head),
+			  "--%s\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n%lld\r\n"
+			  "--%s\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"foto.jpg\"\r\n"
+			  "Content-Type: image/jpeg\r\n\r\n", B, chat, B);
+	int tl = snprintf(tail, sizeof(tail), "\r\n--%s--\r\n", B);
+	char *body = malloc(hl + n + tl);
+	if (!body) {
+		fclose(f);
+		return -1;
+	}
+	memcpy(body, head, hl);
+	size_t got = fread(body + hl, 1, n, f);
+	fclose(f);
+	memcpy(body + hl + got, tail, tl);
+	char path[256], ctype[96], *resp = NULL;
+	snprintf(path, sizeof(path), "/bot%s/sendPhoto", cfg.token);
+	snprintf(ctype, sizeof(ctype), "multipart/form-data; boundary=%s", B);
+	struct https_target t = target();
+	int st = https_request(&t, "POST", path, body, hl + got + tl, ctype, 90, &resp, NULL);
+	free(body);
+	free(resp);
+	return st;
+}
+
+/* Scarica una foto ricevuta e la salva nella Galleria. 0 = ok */
+static int download_photo(const char *file_id, const char *dest)
+{
+	char method[300], *resp = NULL, fpath[256] = "";
+	snprintf(method, sizeof(method), "getFile?file_id=%s", file_id);
+	if (api(method, NULL, 30, &resp) != 200 || !resp) {
+		free(resp);
+		return -1;
+	}
+	jsmn_parser p;
+	jsmntok_t t[64];
+	jsmn_init(&p);
+	if (jsmn_parse(&p, resp, strlen(resp), t, 64) > 0) {
+		int r = find(resp, t, 0, "result");
+		int fp = r >= 0 ? find(resp, t, r, "file_path") : -1;
+		if (fp >= 0)
+			tok_str(resp, &t[fp], fpath, sizeof(fpath));
+	}
+	free(resp);
+	if (!fpath[0])
+		return -1;
+
+	char path[512];
+	size_t len = 0;
+	struct https_target tg = target();
+	snprintf(path, sizeof(path), "/file/bot%s/%s", cfg.token, fpath);
+	if (https_request(&tg, "GET", path, NULL, 0, NULL, 60, &resp, &len) != 200 || !resp) {
+		free(resp);
+		return -1;
+	}
+	mkdir(PHOTO_DIR, 0755);
+	FILE *f = fopen(dest, "wb");
+	int ok = f && fwrite(resp, 1, len, f) == len;
+	if (f) {
+		fflush(f);
+		fsync(fileno(f));
+		fclose(f);
+	}
+	free(resp);
+	return ok ? 0 : -1;
 }
 
 static int send_text(long long chat, const char *text)
@@ -287,7 +375,28 @@ static void handle_message(const char *js, jsmntok_t *t, int m)
 	int imid = find(js, t, m, "message_id");
 	long date = idate >= 0 ? (long)tok_ll(js, &t[idate]) : time(NULL);
 
-	if (itext >= 0) {
+	int iphoto = find(js, t, m, "photo");
+	char photo_file[160] = "";
+	if (iphoto >= 0 && t[iphoto].type == JSMN_ARRAY) {
+		/* Telegram manda più dimensioni: prendi la più grande fino a 1280 px */
+		char best_id[256] = "";
+		int best_w = 0, i = iphoto + 1;
+		for (int k = 0; k < t[iphoto].size; k++) {
+			int iw = find(js, t, i, "width"), ifid = find(js, t, i, "file_id");
+			int w = iw >= 0 ? (int)tok_ll(js, &t[iw]) : 0;
+			if (ifid >= 0 && (best_id[0] == 0 || (w > best_w && w <= 1280))) {
+				tok_str(js, &t[ifid], best_id, sizeof(best_id));
+				best_w = w;
+			}
+			i = skip(t, i);
+		}
+		snprintf(photo_file, sizeof(photo_file), PHOTO_DIR "/TG_%lld.jpg",
+			 imid >= 0 ? tok_ll(js, &t[imid]) : (long long)time(NULL));
+		if (best_id[0] && download_photo(best_id, photo_file) == 0)
+			snprintf(text, sizeof(text), PHOTO_TAG "%s", photo_file);
+		else
+			snprintf(text, sizeof(text), "[Foto non scaricata]");
+	} else if (itext >= 0) {
 		tok_str(js, &t[itext], text, sizeof(text));
 	} else {
 		/* contenuti che non sappiamo ancora mostrare */
@@ -334,6 +443,13 @@ static void handle_message(const char *js, jsmntok_t *t, int m)
 	char id[32];
 	snprintf(id, sizeof(id), "t%lld", imid >= 0 ? tok_ll(js, &t[imid]) : 0);
 	append_log(id, date, 'I', text);
+	/* didascalia della foto: come messaggio separato */
+	int icap = find(js, t, m, "caption");
+	if (iphoto >= 0 && icap >= 0) {
+		tok_str(js, &t[icap], text, sizeof(text));
+		strcat(id, "c");
+		append_log(id, date, 'I', text);
+	}
 }
 
 static void *receiver(void *arg)
@@ -427,7 +543,9 @@ static void send_pending(void)
 		if (!chat)
 			break; /* non ancora abbinato: riprova più tardi */
 		int tries = 0;
-		while (send_text(chat, text) != 200) {
+		int is_photo = !strncmp(text, PHOTO_TAG, strlen(PHOTO_TAG));
+		while ((is_photo ? send_photo(chat, text + strlen(PHOTO_TAG))
+				 : send_text(chat, text)) != 200) {
 			set_status("offline");
 			sleep(tries < 5 ? 2 << tries : 60);
 			tries++;

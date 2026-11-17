@@ -46,6 +46,7 @@ static void open_(void)
 		pops[i].t = 0;
 	score = 0;
 	last_spawn = 0;
+	best = sys_load_int("bolle.record", 0);
 	ui_timer(FRAME);
 }
 
@@ -116,8 +117,10 @@ static void event(const struct event *ev)
 			continue;
 		b[i].alive = 0;
 		score++;
-		if (score > best)
+		if (score > best) {
 			best = score;
+			sys_save_int("bolle.record", best);
+		}
 		for (int k = 0; k < MAX_POP; k++)
 			if (pops[k].t <= 0) {
 				pops[k] = (struct pop){ b[i].x, b[i].y, b[i].r, b[i].c, 10 };

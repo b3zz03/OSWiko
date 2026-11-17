@@ -12,6 +12,10 @@ HEIGHT=${HEIGHT:-1280}
 DISPLAY_OPT="-display gtk,zoom-to-fit=on"
 [ "$1" = "--serial" ] && DISPLAY_OPT="-display none"
 
+# Memoria permanente: data.img è il "disco" del telefono (chat, foto, record).
+# La prima volta viene creato copiando il disco vuoto.
+[ -f data.img ] || cp out/data-vuoto.img data.img
+
 # Messaggi: se c'è telegram.conf (token del bot) lo passa al sistema
 CONF_OPT=""
 [ -f telegram.conf ] && CONF_OPT="-fw_cfg name=opt/oswiko/telegram.conf,file=telegram.conf"
@@ -19,8 +23,9 @@ CONF_OPT=""
 exec qemu-system-aarch64 \
 	-machine virt -cpu cortex-a53 -smp 4 -m 1024 \
 	-kernel out/Image -initrd out/initramfs.cpio.gz \
-	-append "console=ttyAMA0 quiet loglevel=4 ip=dhcp" \
+	-append "console=ttyAMA0 quiet loglevel=4 ip=dhcp oswiko.data=/dev/vda" \
 	-device virtio-gpu-pci,xres=$WIDTH,yres=$HEIGHT \
 	-device virtio-tablet-pci -device virtio-keyboard-pci \
+	-drive file=data.img,format=raw,if=virtio \
 	-netdev user,id=n0 -device virtio-net-pci,netdev=n0 $CONF_OPT \
 	-serial mon:stdio $DISPLAY_OPT

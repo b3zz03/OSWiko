@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
 #include <unistd.h>
@@ -171,4 +172,27 @@ long sys_uptime(void)
 int sys_cpus(void)
 {
 	return (int)sysconf(_SC_NPROCESSORS_ONLN);
+}
+
+/* ---- piccole impostazioni permanenti (record dei giochi, ecc.) ---- */
+
+int sys_load_int(const char *key, int def)
+{
+	char path[256];
+	int v;
+	snprintf(path, sizeof(path), "/data/settings/%s", key);
+	return read_int(path, &v) == 0 ? v : def;
+}
+
+void sys_save_int(const char *key, int v)
+{
+	char path[256];
+	mkdir("/data/settings", 0755);
+	snprintf(path, sizeof(path), "/data/settings/%s", key);
+	write_int(path, v);
+}
+
+int sys_data_volatile(void)
+{
+	return access("/run/data-volatile", F_OK) == 0;
 }

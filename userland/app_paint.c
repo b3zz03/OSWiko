@@ -1,4 +1,5 @@
 /* OSWiko - Disegno: tela, colori, pennelli */
+#include "photos.h"
 #include "ui.h"
 
 #include <string.h>
@@ -14,6 +15,7 @@ static struct image canvas;
 static int have_canvas;
 static int color_i = 5, size_i = 1;
 static int last_x = -1, last_y;
+static long long saved_until;
 
 static int bar_y(void) { return G.h - P(124); }
 
@@ -69,10 +71,22 @@ static void draw(void)
 			gfx_circle(cx, cy, P(17), RGB(220, 220, 226), 255);
 		gfx_circle(cx, cy, P(sizes[i]) / 2.0f + 1, RGB(60, 60, 67), 255);
 	}
-	int bx = x + w - P(116), by = y + P(48);
-	gfx_rrect(bx, by, P(104), P(28), P(14), RGB(255, 59, 48), 255);
-	text_center(bx + P(52), by + P(5), "Cancella", P(15), FONT_SEMIBOLD, WHITE, 255);
+	int bx = x + w - P(96), by = y + P(48);
+	gfx_rrect(bx, by, P(86), P(28), P(14), RGB(255, 59, 48), 255);
+	text_center(bx + P(43), by + P(5), "Cancella", P(14), FONT_SEMIBOLD, WHITE, 255);
+	int sx = bx - P(80);
+	gfx_rrect(sx, by, P(72), P(28), P(14), RGB(0, 122, 255), 255);
+	text_center(sx + P(36), by + P(5), "Salva", P(14), FONT_SEMIBOLD, WHITE, 255);
+
+	if (ui_now_ms() < saved_until) {
+		const char *msg = "Salvato in Galleria";
+		int tw = text_width(msg, P(15), FONT_SEMIBOLD) + P(32);
+		gfx_rrect((G.w - tw) / 2, G.h / 2 - P(22), tw, P(44), P(22), BLACK, 170);
+		text_center(G.w / 2, G.h / 2 - P(11), msg, P(15), FONT_SEMIBOLD, WHITE, 255);
+	}
 }
+
+static void timer(void) { ui_redraw(); } /* toglie il messaggio "Salvato" */
 
 static int in_bar(int x, int y)
 {
@@ -89,8 +103,14 @@ static void bar_tap(int tx, int ty)
 		int i = (tx - x - P(10) + gap / 2) / (cs + gap);
 		if (i >= 0 && i < NPAL)
 			color_i = i;
-	} else if (tx > x + w - P(120)) {
+	} else if (tx > x + w - P(100)) {
 		clear_canvas();
+	} else if (tx > x + w - P(180)) {
+		char path[160];
+		if (photo_save(&canvas, path, sizeof(path)) == 0) {
+			saved_until = ui_now_ms() + 1500;
+			ui_timer(1600);
+		}
 	} else {
 		int i = (tx - x - P(7)) / P(46);
 		if (i >= 0 && i < 3)
@@ -145,5 +165,5 @@ static void icon(int x, int y, int s)
 struct app app_paint = {
 	.name = "Disegno",
 	.icon_top = RGB(255, 255, 255), .icon_bottom = RGB(225, 228, 235),
-	.icon = icon, .open = open_, .draw = draw, .event = event, .light = 1,
+	.icon = icon, .open = open_, .draw = draw, .event = event, .timer = timer, .light = 1,
 };

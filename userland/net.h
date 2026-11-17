@@ -11,10 +11,12 @@ struct https_target {
 	const char *ca_file;  /* certificati delle autorità (PEM) */
 };
 
-/* Esegue una richiesta. *body_out va liberato con free().
+/* Esegue una richiesta. body può contenere dati binari (blen byte);
+ * ctype è il Content-Type (NULL = application/json). *out va liberato con
+ * free() ed è sempre terminato da uno 0 (comodo per il JSON).
  * Ritorna il codice HTTP (200...) oppure -1 in caso di errore di rete. */
 int https_request(const struct https_target *t, const char *method,
-		  const char *path, const char *body, int timeout_s,
-		  char **body_out);
+		  const char *path, const void *body, size_t blen,
+		  const char *ctype, int timeout_s, char **out, size_t *outlen);
 
 #endif

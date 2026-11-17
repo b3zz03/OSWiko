@@ -114,8 +114,10 @@ static void crash(void)
 	crashed = 1;
 	crash_at = ui_now_ms();
 	int score = (int)dist + gems * 5;
-	if (score > best)
+	if (score > best) {
 		best = score;
+		sys_save_int("volpe.record", best);
+	}
 }
 
 static void update(float dt)
@@ -195,6 +197,7 @@ static void open_(void)
 {
 	reset();
 	started = 0;
+	best = sys_load_int("volpe.record", 0);
 	last_ms = ui_now_ms();
 	ui_timer(FRAME_MS);
 }

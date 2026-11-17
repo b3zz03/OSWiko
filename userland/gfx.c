@@ -452,3 +452,60 @@ void gfx_poly(const float *pts, int n, color_t c, int alpha)
 		}
 	}
 }
+
+/* Campionamento bilineare (coordinate in pixel della sorgente). */
+uint32_t img_sample(const struct image *im, float x, float y)
+{
+	if (x < 0) x = 0;
+	if (y < 0) y = 0;
+	if (x > im->w - 1) x = im->w - 1;
+	if (y > im->h - 1) y = im->h - 1;
+	int x0 = (int)x, y0 = (int)y;
+	int x1 = x0 + 1 < im->w ? x0 + 1 : x0, y1 = y0 + 1 < im->h ? y0 + 1 : y0;
+	int fx = (int)((x - x0) * 256), fy = (int)((y - y0) * 256);
+	uint32_t a = im->px[(size_t)y0 * im->w + x0], b = im->px[(size_t)y0 * im->w + x1];
+	uint32_t c = im->px[(size_t)y1 * im->w + x0], d = im->px[(size_t)y1 * im->w + x1];
+	uint32_t out = 0;
+	for (int sh = 0; sh <= 16; sh += 8) {
+		int top = (((a >> sh) & 0xff) * (256 - fx) + ((b >> sh) & 0xff) * fx) >> 8;
+		int bot = (((c >> sh) & 0xff) * (256 - fx) + ((d >> sh) & 0xff) * fx) >> 8;
+		out |= (uint32_t)((top * (256 - fy) + bot * fy) >> 8) << sh;
+	}
+	return out;
+}
+
+void gfx_image(const struct image *im, int x, int y, int w, int h, int cover, int r)
+{
+	if (!im->px || im->w <= 0 || im->h <= 0 || w <= 0 || h <= 0)
+		return;
+	float sx = (float)w / im->w, sy = (float)h / im->h;
+	float s = cover ? fmaxf(sx, sy) : fminf(sx, sy);
+	if (!cover) { /* centra nel rettangolo */
+		int nw = (int)(im->w * s), nh = (int)(im->h * s);
+		x += (w - nw) / 2;
+		y += (h - nh) / 2;
+		w = nw;
+		h = nh;
+	}
+	float ox = (im->w - w / s) / 2, oy = (im->h - h / s) / 2;
+	int y0 = y < 0 ? 0 : y, y1 = y + h > G.h ? G.h : y + h;
+	int x0 = x < 0 ? 0 : x, x1 = x + w > G.w ? G.w : x + w;
+	/* immagine alla stessa scala: copia diretta, molto più veloce */
+	int same = fabsf(s - 1) < 0.001f && r == 0;
+	for (int yy = y0; yy < y1; yy++) {
+		uint32_t *row = G.back + (size_t)yy * G.w;
+		float fy = oy + (yy - y + 0.5f) / s - 0.5f;
+		for (int xx = x0; xx < x1; xx++) {
+			uint32_t c = same ? im->px[(size_t)(int)(oy + yy - y) * im->w + (int)(ox + xx - x)]
+					  : img_sample(im, ox + (xx - x + 0.5f) / s - 0.5f, fy);
+			if (r > 0) {
+				float cov = rr_cov(xx, yy, x, y, w, h, r);
+				if (cov < 1) {
+					blend(&row[xx], c, (int)(255 * cov));
+					continue;
+				}
+			}
+			row[xx] = c;
+		}
+	}
+}

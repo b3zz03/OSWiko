@@ -49,6 +49,42 @@ static void console_tty(char *buf, size_t n)
 	snprintf(buf, n, "/dev/%s", name[0] ? name : "console");
 }
 
+/* Monta la memoria permanente su /data. Il dispositivo è indicato sulla riga
+ * di comando del kernel (oswiko.data=/dev/vda nell'emulatore; sul telefono
+ * sarà la partizione userdata). Se manca, usa la RAM e lo segnala in
+ * /run/data-volatile: le app possono avvisare che i dati non restano. */
+static void mount_data(void)
+{
+	char cmdline[1024] = "", dev[128] = "";
+	FILE *f = fopen("/proc/cmdline", "r");
+	if (f) {
+		if (!fgets(cmdline, sizeof(cmdline), f))
+			cmdline[0] = 0;
+		fclose(f);
+	}
+	char *p = strstr(cmdline, "oswiko.data=");
+	if (p)
+		sscanf(p + 12, "%127s", dev);
+
+	mkdir("/data", 0755);
+	if (dev[0]) {
+		for (int i = 0; i < 30 && access(dev, F_OK) != 0; i++)
+			usleep(100000); /* il disco può comparire con un attimo di ritardo */
+		/* commit=2: i dati arrivano sul disco entro 2 secondi */
+		if (mount(dev, "/data", "ext4", MS_NOSUID | MS_NODEV | MS_NOATIME,
+			  "commit=2") == 0) {
+			fprintf(stderr, "[init] memoria permanente: %s su /data\n", dev);
+			return;
+		}
+		fprintf(stderr, "[init] impossibile montare %s: %s\n", dev, strerror(errno));
+	}
+	mount_fs("tmpfs", "/data", "tmpfs", MS_NOSUID | MS_NODEV);
+	int fd = open("/run/data-volatile", O_WRONLY | O_CREAT, 0644);
+	if (fd >= 0)
+		close(fd);
+	log_msg("nessun disco: i dati restano solo fino allo spegnimento");
+}
+
 static pid_t spawn(const char *path, int with_tty)
 {
 	pid_t pid = fork();
@@ -101,8 +137,7 @@ int main(void)
 	mount_fs("devtmpfs", "/dev", "devtmpfs", MS_NOSUID);
 	mount_fs("tmpfs", "/tmp", "tmpfs", MS_NOSUID | MS_NODEV);
 	mount_fs("tmpfs", "/run", "tmpfs", MS_NOSUID | MS_NODEV);
-	/* dati utente: per ora in RAM; sul telefono sarà la partizione userdata */
-	mount_fs("tmpfs", "/data", "tmpfs", MS_NOSUID | MS_NODEV);
+	mount_data();
 	if (sethostname("oswiko", 6) < 0)
 		perror("sethostname");
 	setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);

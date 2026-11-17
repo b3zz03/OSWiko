@@ -5,7 +5,7 @@
 #include "gfx.h"
 #include "input.h"
 
-#define OSWIKO_VERSION "0.1"
+#define OSWIKO_VERSION "0.2"
 
 /* Una app di sistema. Ogni app vive in app_*.c e si registra in apps[]. */
 struct app {
@@ -23,12 +23,13 @@ struct app {
 };
 
 extern struct app app_clock, app_calc, app_paint, app_memory, app_bubbles,
-	app_torch, app_settings, app_jump, app_runner, app_chat;
+	app_torch, app_settings, app_jump, app_runner, app_chat, app_gallery, app_camera;
 
 /* Servizi per le app */
 void ui_redraw(void);              /* chiede di ridisegnare lo schermo */
 void ui_timer(int ms);             /* chiama app->timer() tra ms (0 = annulla) */
 void ui_go_home(void);
+void ui_open(struct app *a);       /* apre un'app (anche da un'altra app) */
 void ui_power(int reboot);         /* spegne (0) o riavvia (1) */
 long long ui_now_ms(void);
 int  ui_status_h(void);            /* altezza barra di stato in pixel */
@@ -51,6 +52,9 @@ void sys_kernel(char *buf, int n);
 void sys_memory(long *total_mb, long *free_mb);
 long sys_uptime(void);
 int  sys_cpus(void);
+int  sys_load_int(const char *key, int def);   /* /data/settings/<key> */
+void sys_save_int(const char *key, int v);
+int  sys_data_volatile(void);                   /* 1 se /data è solo in RAM */
 
 /* Testo accorciato con "…" per stare in maxw pixel */
 void text_fit(const char *s, int px, enum font_weight w, int maxw, char *out, int n);
