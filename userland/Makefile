@@ -10,7 +10,7 @@ LDFLAGS += -static -Wl,--gc-sections
 
 UI_SRC := ui.c gfx.c text.c input.c sys.c \
           app_clock.c app_calc.c app_paint.c app_memory.c app_bubbles.c \
-          app_torch.c app_settings.c
+          app_torch.c app_settings.c app_jump.c app_runner.c
 
 all: $(OUT)/init $(OUT)/ui $(OUT)/osh
 

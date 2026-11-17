@@ -21,7 +21,7 @@ struct app {
 };
 
 extern struct app app_clock, app_calc, app_paint, app_memory, app_bubbles,
-	app_torch, app_settings;
+	app_torch, app_settings, app_jump, app_runner;
 
 /* Servizi per le app */
 void ui_redraw(void);              /* chiede di ridisegnare lo schermo */

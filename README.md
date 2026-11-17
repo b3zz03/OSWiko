@@ -4,6 +4,8 @@ Un sistema operativo fatto in casa per il **Wiko Ridge 4G** (Snapdragon 410, 2 G
 
 ![OSWiko nell'emulatore](docs/screenshots/panoramica.png)
 
+![I giochi: Balzo e Volpe in Fuga](docs/screenshots/giochi.png)
+
 Per ora gira nell'emulatore QEMU. Il porting sul telefono vero è la fase 2 (vedi [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ## Cosa c'è
@@ -13,6 +15,8 @@ Per ora gira nell'emulatore QEMU. Il porting sul telefono vero è la fase 2 (ved
 | **Schermata di blocco** | ora, data in italiano, "scorri verso l'alto per aprire" |
 | **Home** | griglia di icone, dock in vetro, sfondo sfumato, animazione di apertura delle app |
 | **Gesture** | trascina dal bordo inferiore verso l'alto per tornare alla home |
+| **Volpe in Fuga** | corsa infinita in 3D su 3 corsie nel bosco: swipe per cambiare corsia, saltare i tronchi, scivolare sotto le staccionate; gemme da raccogliere |
+| **Balzo** | platform a un tasto: il cubo corre da solo, tocca per saltare spuntoni, blocchi e burroni; percorso fisso da imparare, record e tentativi |
 | **Orologio** | quadrante analogico con lancetta dei secondi + ora digitale |
 | **Calcolatrice** | stile iOS, funziona anche con la tastiera del PC |
 | **Disegno** | tela, 8 colori, 3 pennelli |
@@ -52,7 +56,7 @@ scripts/             initramfs e script di avvio
 2. Su GitHub apri la scheda **Actions** del repo, scegli l'ultima build verde e scarica l'artifact **oswiko-emulatore** (zip).
 3. Estrai lo zip e fai doppio clic su `run-qemu.bat`.
 
-Comandi nell'emulatore: il **mouse** fa da dito, **ESC** = tasto Home, **F12** = tasto Power, **Invio** sblocca. Nella finestra del cmd c'è la shell `osh` (digita `help`).
+Comandi nell'emulatore: il **mouse** fa da dito (trascina per gli swipe), **ESC** = tasto Home, **F12** = tasto Power, **Invio** sblocca. Nei giochi funzionano anche le **frecce** e la **barra spaziatrice**. Nella finestra del cmd c'è la shell `osh` (digita `help`).
 
 ## Compilarlo (Linux o WSL2 su Windows)
 

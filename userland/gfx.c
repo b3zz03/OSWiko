@@ -207,23 +207,52 @@ void gfx_rrect(int x, int y, int w, int h, int r, color_t c, int alpha)
 
 void gfx_shadow(int x, int y, int w, int h, int r, int spread, int alpha)
 {
-	for (int i = spread; i > 0; i--)
+	/* al massimo 4 strati: stesso effetto, molti meno pixel da fondere */
+	int step = spread > 4 ? spread / 4 : 1, layers = spread / step;
+	for (int i = spread; i > 0; i -= step)
 		gfx_rrect(x - i, y - i + spread / 2, w + 2 * i, h + 2 * i, r + i,
-			  BLACK, alpha / spread);
+			  BLACK, alpha / layers);
 }
 
+/* Cerchio pieno: per ogni riga si riempie il tratto interno in blocco e si
+ * calcola l'anti-aliasing solo sui pochi pixel del bordo. */
 void gfx_circle(float cx, float cy, float r, color_t c, int alpha)
 {
-	int x0 = (int)floorf(cx - r - 1), x1 = (int)ceilf(cx + r + 1);
 	int y0 = (int)floorf(cy - r - 1), y1 = (int)ceilf(cy + r + 1);
+	if (y0 < 0) y0 = 0;
+	if (y1 > G.h - 1) y1 = G.h - 1;
 
-	for (int y = y0; y <= y1; y++)
-		for (int x = x0; x <= x1; x++) {
-			float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+	for (int y = y0; y <= y1; y++) {
+		float dy = y + 0.5f - cy;
+		float ro = r + 1, ri = r - 1;
+		if (dy * dy >= ro * ro)
+			continue;
+		float out = sqrtf(ro * ro - dy * dy);
+		float in = ri > 0 && dy * dy < ri * ri ? sqrtf(ri * ri - dy * dy) : 0;
+		int xa = (int)floorf(cx - out), xb = (int)ceilf(cx + out);
+		int ia = (int)ceilf(cx - in), ib = (int)floorf(cx + in);
+		if (in <= 0)
+			ia = ib = (int)cx; /* nessun tratto interno */
+		uint32_t *row = G.back + (size_t)y * G.w;
+		if (in <= 0 || ia >= ib)
+			ia = ib = xb + 1; /* tutta la riga è bordo */
+		/* bordo sinistro, interno pieno, bordo destro */
+		for (int x = xa; x <= xb; x++) {
+			if (x == ia) {
+				int s0 = ia < 0 ? 0 : ia, e = ib < G.w ? ib : G.w;
+				for (int k = s0; k < e; k++)
+					blend(&row[k], c, alpha);
+				x = ib - 1;
+				continue;
+			}
+			if ((unsigned)x >= (unsigned)G.w)
+				continue;
+			float dx = x + 0.5f - cx;
 			float cov = clampf(r - sqrtf(dx * dx + dy * dy) + 0.5f);
 			if (cov > 0)
-				plot(x, y, c, (int)(alpha * cov));
+				blend(&row[x], c, (int)(alpha * cov));
 		}
+	}
 }
 
 void gfx_ring(float cx, float cy, float r, float thick, color_t c, int alpha)
@@ -351,20 +380,34 @@ void gfx_blit_rrect(const struct image *im, int x, int y, int w, int h, int r)
  * esatta agli estremi di ogni tratto. pts = x0,y0,x1,y1,... */
 void gfx_poly(const float *pts, int n, color_t c, int alpha)
 {
+	static float *acc;
+	static int acc_w;
+	float xs[64];
+
+	if (n > 64 || n < 3)
+		return;
 	float minx = pts[0], maxx = pts[0], miny = pts[1], maxy = pts[1];
 	for (int i = 1; i < n; i++) {
 		minx = fminf(minx, pts[2 * i]); maxx = fmaxf(maxx, pts[2 * i]);
 		miny = fminf(miny, pts[2 * i + 1]); maxy = fmaxf(maxy, pts[2 * i + 1]);
 	}
-	int bx0 = (int)floorf(minx), bx1 = (int)ceilf(maxx);
-	int by0 = (int)floorf(miny), by1 = (int)ceilf(maxy);
+	/* ritaglio allo schermo: si lavora solo sulla parte visibile */
+	int bx0 = (int)floorf(fmaxf(minx, 0)), bx1 = (int)ceilf(fminf(maxx, G.w - 1));
+	int by0 = (int)floorf(fmaxf(miny, 0)), by1 = (int)ceilf(fminf(maxy, G.h - 1));
+	if (bx0 > bx1 || by0 > by1)
+		return;
 	int bw = bx1 - bx0 + 1;
-	float *acc = calloc(bw, sizeof(float));
-	float xs[64];
-
-	if (!acc || n > 64)
-		goto out;
+	if (acc_w < G.w + 2) {
+		free(acc);
+		acc_w = G.w + 2;
+		acc = malloc(acc_w * sizeof(float));
+		if (!acc) {
+			acc_w = 0;
+			return;
+		}
+	}
 	for (int y = by0; y <= by1; y++) {
+		int lo = bw, hi = -1;
 		memset(acc, 0, bw * sizeof(float));
 		for (int sub = 0; sub < 4; sub++) {
 			float sy = y + (sub + 0.5f) / 4;
@@ -375,13 +418,17 @@ void gfx_poly(const float *pts, int n, color_t c, int alpha)
 				if ((ay <= sy && cy > sy) || (cy <= sy && ay > sy))
 					xs[k++] = ax + (sy - ay) * (cx - ax) / (cy - ay);
 			}
-			for (int i = 1; i < k; i++) /* insertion sort */
+			for (int i = 1; i < k; i++)
 				for (int j = i; j > 0 && xs[j - 1] > xs[j]; j--) {
 					float t = xs[j]; xs[j] = xs[j - 1]; xs[j - 1] = t;
 				}
 			for (int i = 0; i + 1 < k; i += 2) {
-				float xa = xs[i] - bx0, xb = xs[i + 1] - bx0;
-				int ia = (int)floorf(xa), ib = (int)floorf(xb);
+				float xa = fmaxf(xs[i] - bx0, 0), xb = fminf(xs[i + 1] - bx0, bw);
+				if (xb <= xa)
+					continue;
+				int ia = (int)xa, ib = (int)xb;
+				if (ia < lo) lo = ia;
+				if (ib > hi) hi = ib < bw ? ib : bw - 1;
 				if (ia == ib) {
 					acc[ia] += (xb - xa) / 4;
 					continue;
@@ -393,10 +440,15 @@ void gfx_poly(const float *pts, int n, color_t c, int alpha)
 					acc[ib] += (xb - ib) / 4;
 			}
 		}
-		for (int x = 0; x < bw; x++)
-			if (acc[x] > 0)
-				plot(bx0 + x, y, c, (int)(alpha * clampf(acc[x])));
+		if (hi < 0)
+			continue;
+		uint32_t *row = G.back + (size_t)y * G.w + bx0;
+		for (int x = lo; x <= hi; x++) {
+			float a = acc[x];
+			if (a >= 0.999f)
+				blend(&row[x], c, alpha);
+			else if (a > 0)
+				blend(&row[x], c, (int)(alpha * a));
+		}
 	}
-out:
-	free(acc);
 }

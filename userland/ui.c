@@ -14,7 +14,8 @@
 #include <time.h>
 #include <unistd.h>
 
-static struct app *grid_apps[] = { &app_clock, &app_calc, &app_bubbles, &app_memory };
+static struct app *grid_apps[] = { &app_runner, &app_jump, &app_bubbles, &app_memory,
+				    &app_clock, &app_calc };
 static struct app *dock_apps[] = { &app_paint, &app_torch, &app_settings };
 #define N_GRID ((int)(sizeof(grid_apps) / sizeof(grid_apps[0])))
 #define N_DOCK ((int)(sizeof(dock_apps) / sizeof(dock_apps[0])))
@@ -438,8 +439,25 @@ int main(void)
 	for (;;) {
 		if (need_redraw) {
 			need_redraw = 0;
+#ifdef PERF
+			long long t0 = ui_now_ms();
+#endif
 			draw();
+#ifdef PERF
+			long long t1 = ui_now_ms();
+#endif
 			gfx_present();
+#ifdef PERF
+			static long long sum_d, sum_p;
+			static int nf;
+			sum_d += t1 - t0;
+			sum_p += ui_now_ms() - t1;
+			if (++nf == 30) {
+				fprintf(stderr, "perf: disegno %lld ms, copia %lld ms\n",
+					sum_d / nf, sum_p / nf);
+				sum_d = sum_p = nf = 0;
+			}
+#endif
 		}
 		long long now = ui_now_ms();
 		int timeout = 1000 - (int)(now % 1000);
