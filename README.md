@@ -70,7 +70,7 @@ scripts/             initramfs e script di avvio
 
 1. Installa QEMU: dal cmd lancia `winget install SoftwareFreedomConservancy.QEMU`, oppure scaricalo da <https://www.qemu.org/download/#windows>.
 2. Su GitHub apri la scheda **Actions** del repo, scegli l'ultima build verde e scarica l'artifact **oswiko-emulatore** (zip).
-3. Estrai lo zip e fai doppio clic su `run-qemu.bat`.
+3. Estrai lo zip e fai doppio clic su `run-qemu.bat` (schermo 360×640, entra in ogni monitor). Con un monitor grande usa `run-qemu-grande.bat`; se i clic non funzionano prova `run-qemu-sdl.bat`.
 
 Chat, foto e record dei giochi vengono salvati in **`data.img`**, il "disco" del telefono, che lo script crea la prima volta. Quando scarichi una versione nuova di OSWiko, **tieni il tuo `data.img`** (e `telegram.conf`): così non perdi niente.
 

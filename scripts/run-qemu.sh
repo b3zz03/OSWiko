@@ -1,15 +1,15 @@
 #!/bin/sh
 # OSWiko - avvia nell'emulatore QEMU
-#   ./scripts/run-qemu.sh            finestra grafica 720x1280 (come il Wiko Ridge 4G)
+#   ./scripts/run-qemu.sh            finestra grafica 360x640 (WIDTH=720 HEIGHT=1280 per la risoluzione del Wiko)
 #   ./scripts/run-qemu.sh --serial   senza finestra, solo console
 # Nella finestra: il mouse fa da dito, ESC = tasto Home, F12 = tasto Power.
 # Trascina dal bordo in basso verso l'alto per tornare alla home.
 set -e
 cd "$(dirname "$0")/.."
 
-WIDTH=${WIDTH:-720}
-HEIGHT=${HEIGHT:-1280}
-DISPLAY_OPT="-display gtk,zoom-to-fit=on"
+WIDTH=${WIDTH:-360}
+HEIGHT=${HEIGHT:-640}
+DISPLAY_OPT="-display gtk,zoom-to-fit=off"
 [ "$1" = "--serial" ] && DISPLAY_OPT="-display none"
 
 # Memoria permanente: data.img è il "disco" del telefono (chat, foto, record).
