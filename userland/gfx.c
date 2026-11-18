@@ -31,6 +31,15 @@ int gfx_init(const char *fbdev)
 		perror("FBIOGET_*SCREENINFO");
 		return -1;
 	}
+	/* Accende esplicitamente l'uscita video. Senza console di testo nessuno
+	 * lo fa al posto nostro: su alcuni sistemi (QEMU su Windows, telefoni)
+	 * lo schermo resterebbe spento anche se disegniamo. */
+	var.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE;
+	if (ioctl(fb_fd, FBIOPUT_VSCREENINFO, &var) < 0)
+		perror("FBIOPUT_VSCREENINFO");
+	ioctl(fb_fd, FBIOGET_VSCREENINFO, &var);
+	ioctl(fb_fd, FBIOGET_FSCREENINFO, &fix);
+	ioctl(fb_fd, FBIOBLANK, FB_BLANK_UNBLANK);
 	if (var.bits_per_pixel != 32 && var.bits_per_pixel != 16) {
 		fprintf(stderr, "gfx: %u bpp non supportati\n", var.bits_per_pixel);
 		return -1;
