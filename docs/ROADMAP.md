@@ -43,7 +43,8 @@ Il codice dell'interfaccia è già pronto per il telefono: usa `/dev/fb0`, il to
 ## Fase 4 - Funzioni da sistema moderno
 
 - [ ] Wi-Fi (driver `wcn36xx`, già nel kernel mainline) + schermata di connessione
-- [ ] Centro di controllo (scorri dall'alto): luminosità, Wi-Fi, volume, torcia
+- [x] Centro di controllo (scorri dall'alto): modalità aereo, rete, luminosità, volume, Non disturbare, scorciatoie
+- [ ] Centro di controllo sul telefono: Wi-Fi vero (nome della rete), torcia con il LED del flash, rotazione
 - [ ] Notifiche
 - [ ] Audio (codec MSM8916 supportato nel mainline)
 - [ ] Tastiera a schermo

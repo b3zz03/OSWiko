@@ -45,6 +45,8 @@ void gfx_rrect_grad(int x, int y, int w, int h, int r,
 void gfx_shadow(int x, int y, int w, int h, int r, int spread, int alpha);
 void gfx_circle(float cx, float cy, float r, color_t c, int alpha);
 void gfx_ring(float cx, float cy, float r, float thick, color_t c, int alpha);
+void gfx_arc(float cx, float cy, float r, float thick, float a0, float a1,
+	     color_t c, int alpha);
 void gfx_line(float x0, float y0, float x1, float y1, float thick,
 	      color_t c, int alpha);
 void gfx_vgradient(int x, int y, int w, int h, color_t top, color_t bottom);

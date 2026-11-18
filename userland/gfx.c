@@ -509,3 +509,26 @@ void gfx_image(const struct image *im, int x, int y, int w, int h, int cover, in
 		}
 	}
 }
+
+/* Arco di cerchio spesso: angoli in radianti, 0 = destra, crescono in senso
+ * orario (y verso il basso), da a0 ad a1. */
+void gfx_arc(float cx, float cy, float r, float thick, float a0, float a1,
+	     color_t c, int alpha)
+{
+	int x0 = (int)floorf(cx - r - 1), x1 = (int)ceilf(cx + r + 1);
+	int y0 = (int)floorf(cy - r - 1), y1 = (int)ceilf(cy + r + 1);
+	float ri = r - thick;
+	for (int y = y0; y <= y1; y++)
+		for (int x = x0; x <= x1; x++) {
+			float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+			float d = sqrtf(dx * dx + dy * dy);
+			float cov = fminf(clampf(r - d + 0.5f), clampf(d - ri + 0.5f));
+			if (cov <= 0)
+				continue;
+			float a = atan2f(dy, dx);
+			if (a < a0) a += 2 * (float)M_PI;
+			if (a > a1)
+				continue;
+			plot(x, y, c, (int)(alpha * cov));
+		}
+}

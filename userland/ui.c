@@ -4,6 +4,7 @@
  * cambio di minuto), così la CPU resta ferma il più possibile.
  */
 #include "ui.h"
+#include "control.h"
 
 #include <linux/input-event-codes.h>
 #include <math.h>
@@ -36,6 +37,10 @@ static int gesture_y0 = -1;
 static struct { int fd; void (*cb)(int); } watches[4];
 static int n_watches;
 
+/* impostazioni di sistema */
+static int brightness = 100, volume = 60, dnd, airplane, wifi = 1, has_backlight;
+static long long hud_until;
+
 /* banner di notifica */
 static struct app *banner_app;
 static char banner_title[64], banner_text[256];
@@ -67,6 +72,56 @@ unsigned ui_rand(void)
 
 void ui_redraw(void) { need_redraw = 1; }
 int ui_is_open(struct app *a) { return st == ST_APP && cur == a; }
+
+int ui_brightness(void) { return brightness; }
+int ui_volume(void) { return volume; }
+int ui_dnd(void) { return dnd; }
+int ui_airplane(void) { return airplane; }
+int ui_wifi(void) { return wifi; }
+
+void ui_set_brightness(int v)
+{
+	brightness = v < 5 ? 5 : v > 100 ? 100 : v; /* mai completamente buio */
+	if (has_backlight)
+		sys_backlight_set(brightness);
+	sys_save_int("luminosita", brightness);
+	need_redraw = 1;
+}
+
+void ui_set_volume(int v)
+{
+	volume = v < 0 ? 0 : v > 100 ? 100 : v;
+	sys_save_int("volume", volume);
+	need_redraw = 1;
+}
+
+void ui_set_dnd(int on)
+{
+	dnd = on;
+	sys_save_int("non_disturbare", dnd);
+	need_redraw = 1;
+}
+
+static void apply_network(void)
+{
+	sys_net_set(!airplane && wifi);
+}
+
+void ui_set_airplane(int on)
+{
+	airplane = on;
+	sys_save_int("aereo", airplane);
+	apply_network();
+	need_redraw = 1;
+}
+
+void ui_set_wifi(int on)
+{
+	wifi = on;
+	sys_save_int("wifi", wifi);
+	apply_network();
+	need_redraw = 1;
+}
 void ui_badges_changed(void) { if (st == ST_HOME) need_redraw = 1; }
 
 void ui_watch_fd(int fd, void (*cb)(int))
@@ -81,6 +136,8 @@ void ui_watch_fd(int fd, void (*cb)(int))
 
 void ui_notify(struct app *a, const char *title, const char *text)
 {
+	if (dnd)
+		return; /* Non disturbare: resta solo il badge sull'icona */
 	banner_app = a;
 	snprintf(banner_title, sizeof(banner_title), "%s", title);
 	snprintf(banner_text, sizeof(banner_text), "%s", text);
@@ -124,6 +181,12 @@ static struct tm now_tm(void)
 
 /* ---------------- elementi comuni ---------------- */
 
+/* colore "di sfondo" per ritagliare la luna nella barra di stato */
+static color_t dark_text_bg(int dark)
+{
+	return dark ? RGB(242, 242, 247) : RGB(60, 50, 110);
+}
+
 static void status_bar(int dark, int show_time)
 {
 	color_t c = dark ? BLACK : WHITE;
@@ -144,6 +207,14 @@ static void status_bar(int dark, int show_time)
 		snprintf(buf, sizeof(buf), "%d%%", pct);
 		text_right(bx - P(5), P(15), buf, P(13), FONT_SEMIBOLD, c, 255);
 	}
+	/* indicatori a destra: modalità aereo e Non disturbare */
+	float ix = G.w - P(sys_battery(&pct, &charging) ? 92 : 34), iy = P(23);
+	if (airplane) {
+		cc_icon_airplane(ix, iy, P(17), c);
+		ix -= P(22);
+	}
+	if (dnd)
+		cc_icon_moon(ix, iy, P(17), c, dark_text_bg(dark));
 }
 
 void ui_status_bar(int dark_text) { status_bar(dark_text, 1); }
@@ -190,6 +261,11 @@ static void draw_icon(struct app *a, int x, int y, int s, int is_pressed)
 		gfx_rrect(x + s - bw + P(6), y - P(6), bw, P(22), P(11), RGB(255, 59, 48), 255);
 		text_center(x + s - bw / 2 + P(6), y - P(4), b, P(14), FONT_SEMIBOLD, WHITE, 255);
 	}
+}
+
+void ui_draw_icon(struct app *a, int x, int y, int s)
+{
+	draw_icon(a, x, y, s, 0);
 }
 
 /* Banner di notifica in alto, sopra a tutto */
@@ -276,7 +352,21 @@ static void draw_lock(void)
 	ui_home_indicator(0);
 }
 
-static void draw(void)
+void ui_apply_overlays(void)
+{
+	long long now = ui_now_ms();
+	if (now < hud_until) { /* indicatore del volume, a sinistra */
+		int x = P(12), y = P(170), w = P(40), h = P(150);
+		gfx_rrect(x, y, w, h, P(14), RGB(40, 40, 44), 200);
+		int fh = (h - P(44)) * volume / 100;
+		gfx_rrect(x + P(8), y + h - P(36) - fh, w - P(16), fh, P(6), WHITE, 240);
+		cc_icon_speaker(x + w / 2.0f, y + h - P(18), P(22), WHITE, volume);
+	}
+	if (!has_backlight && brightness < 100) /* nell'emulatore: oscura lo schermo */
+		gfx_rect(0, 0, G.w, G.h, BLACK, (100 - brightness) * 190 / 100);
+}
+
+static void draw_scene(void)
 {
 	switch (st) {
 	case ST_OFF:
@@ -294,7 +384,18 @@ static void draw(void)
 		ui_home_indicator(cur->light);
 		break;
 	}
+}
+
+static void draw(void)
+{
+	if (cc_active() && st != ST_OFF) {
+		cc_draw();
+		status_bar(0, st != ST_LOCK); /* barra di stato bianca sopra il pannello */
+	} else
+		draw_scene();
 	draw_banner();
+	if (st != ST_OFF)
+		ui_apply_overlays();
 }
 
 /* Animazione "zoom" dall'icona allo schermo intero (o al contrario). */
@@ -382,6 +483,14 @@ void ui_power(int reboot_)
 	sleep(1);
 	reboot(reboot_ ? RB_AUTOBOOT : RB_POWER_OFF);
 	need_redraw = 1; /* se fallisce (non siamo root), torna indietro */
+}
+
+static void screen_toggle(void);
+
+void ui_lock_now(void)
+{
+	if (st != ST_OFF)
+		screen_toggle();
 }
 
 static void screen_toggle(void)
@@ -473,6 +582,27 @@ static void dispatch(const struct event *ev)
 		need_redraw = 1;
 		return;
 	}
+	/* centro di controllo aperto: riceve tutto */
+	if (cc_active()) {
+		if (ev->type == IN_KEY && ev->code != KEY_POWER && ev->code != KEY_F12 &&
+		    ev->code != KEY_VOLUMEUP && ev->code != KEY_VOLUMEDOWN) {
+			if (ev->code == KEY_ESC || ev->code == KEY_HOMEPAGE || ev->code == KEY_BACK)
+				cc_close();
+			return;
+		}
+		if (ev->type != IN_KEY) {
+			cc_event(ev);
+			return;
+		}
+		if (ev->code == KEY_POWER || ev->code == KEY_F12)
+			cc_close();
+	}
+	/* trascinare dal bordo superiore apre il centro di controllo */
+	if (ev->type == IN_TOUCH_DOWN && ev->y < P(26) && st != ST_OFF) {
+		draw_scene(); /* schermo "pulito", senza oscuramento */
+		cc_begin_pull(ev->y);
+		return;
+	}
 	if (ev->type == IN_KEY) {
 		switch (ev->code) {
 		case KEY_POWER:
@@ -489,13 +619,10 @@ static void dispatch(const struct event *ev)
 				st = ST_HOME, need_redraw = 1;
 			return;
 		case KEY_VOLUMEUP:
-		case KEY_VOLUMEDOWN: {
-			int b = sys_backlight_get();
-			if (b >= 0)
-				sys_backlight_set(b + (ev->code == KEY_VOLUMEUP ? 10 : -10));
-			need_redraw = 1;
+		case KEY_VOLUMEDOWN:
+			ui_set_volume(volume + (ev->code == KEY_VOLUMEUP ? 10 : -10));
+			hud_until = ui_now_ms() + 1500;
 			return;
-		}
 		}
 		if (st == ST_LOCK && (ev->code == KEY_ENTER || ev->code == KEY_SPACE)) {
 			st = ST_HOME;
@@ -564,6 +691,18 @@ int main(void)
 		return 1;
 	make_wallpaper();
 
+	/* impostazioni salvate */
+	has_backlight = sys_backlight_get() >= 0;
+	brightness = sys_load_int("luminosita", 100);
+	volume = sys_load_int("volume", 60);
+	dnd = sys_load_int("non_disturbare", 0);
+	airplane = sys_load_int("aereo", 0);
+	wifi = sys_load_int("wifi", 1);
+	if (has_backlight)
+		sys_backlight_set(brightness);
+	if (airplane || !wifi)
+		apply_network();
+
 	for (int i = 0; i < N_GRID; i++)
 		if (grid_apps[i]->init)
 			grid_apps[i]->init();
@@ -600,6 +739,18 @@ int main(void)
 		int timeout = 1000 - (int)(now % 1000);
 		if (timer_at && timer_at - now < timeout)
 			timeout = timer_at > now ? (int)(timer_at - now) : 0;
+		int cn = cc_next_ms();
+		if (cn >= 0 && cn < timeout)
+			timeout = cn;
+		static int hud_shown;
+		if (hud_until > now) {
+			hud_shown = 1;
+			if (hud_until - now < timeout)
+				timeout = (int)(hud_until - now) + 1;
+		} else if (hud_shown) {
+			hud_shown = 0;
+			need_redraw = 1;
+		}
 		if (banner_until > now) {
 			banner_shown = 1;
 			if (banner_until - now < timeout)
@@ -617,6 +768,7 @@ int main(void)
 			while (input_wait(&ev, 0))
 				dispatch(&ev);
 		}
+		cc_tick();
 		if (timer_at && ui_now_ms() >= timer_at) {
 			timer_at = 0;
 			if (st == ST_APP && cur->timer)

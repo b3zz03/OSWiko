@@ -1,7 +1,13 @@
 /* OSWiko - informazioni e controlli di sistema via /sys e /proc */
 #include "ui.h"
 
+#include <arpa/inet.h>
 #include <dirent.h>
+#include <net/if.h>
+#include <net/route.h>
+#include <netinet/in.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -195,4 +201,112 @@ void sys_save_int(const char *key, int v)
 int sys_data_volatile(void)
 {
 	return access("/run/data-volatile", F_OK) == 0;
+}
+
+/* ---- rete: accendi/spegni le interfacce (Wi-Fi, modalità aereo) ---- */
+
+static int iface_flags(int sk, const char *name, int set, int clear)
+{
+	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(ifr));
+	snprintf(ifr.ifr_name, IFNAMSIZ, "%s", name);
+	if (ioctl(sk, SIOCGIFFLAGS, &ifr) < 0)
+		return -1;
+	if (set || clear) {
+		ifr.ifr_flags = (ifr.ifr_flags | set) & ~clear;
+		if (ioctl(sk, SIOCSIFFLAGS, &ifr) < 0)
+			return -1;
+	}
+	return ifr.ifr_flags;
+}
+
+/* Gateway predefinito dell'interfaccia (da /proc/net/route), 0 se nessuno. */
+static unsigned default_gw(const char *name)
+{
+	FILE *f = fopen("/proc/net/route", "r");
+	char line[256], ifn[32];
+	unsigned dst, gw;
+	unsigned found = 0;
+	if (!f)
+		return 0;
+	while (fgets(line, sizeof(line), f))
+		if (sscanf(line, "%31s %x %x", ifn, &dst, &gw) == 3 && dst == 0 &&
+		    !strcmp(ifn, name))
+			found = gw;
+	fclose(f);
+	return found;
+}
+
+void sys_net_set(int up)
+{
+	DIR *d = opendir("/sys/class/net");
+	struct dirent *de;
+	int sk = socket(AF_INET, SOCK_DGRAM, 0);
+	if (!d || sk < 0)
+		goto out;
+	while ((de = readdir(d))) {
+		const char *n = de->d_name;
+		char path[128];
+		if (n[0] == '.' || !strcmp(n, "lo"))
+			continue;
+		snprintf(path, sizeof(path), "/run/gw-%.32s", n);
+		if (!up) {
+			/* spegnere l'interfaccia cancella il percorso verso internet:
+			 * ricordiamo il gateway per rimetterlo alla riaccensione */
+			unsigned gw = default_gw(n);
+			if (gw) {
+				FILE *f = fopen(path, "w");
+				if (f) { fprintf(f, "%u\n", gw); fclose(f); }
+			}
+			iface_flags(sk, n, 0, IFF_UP);
+		} else {
+			iface_flags(sk, n, IFF_UP, 0);
+			FILE *f = fopen(path, "r");
+			unsigned gw = 0;
+			if (f) {
+				if (fscanf(f, "%u", &gw) != 1)
+					gw = 0;
+				fclose(f);
+			}
+			if (gw && !default_gw(n)) {
+				struct rtentry rt;
+				memset(&rt, 0, sizeof(rt));
+				struct sockaddr_in *a = (struct sockaddr_in *)&rt.rt_gateway;
+				a->sin_family = AF_INET;
+				a->sin_addr.s_addr = gw;
+				((struct sockaddr_in *)&rt.rt_dst)->sin_family = AF_INET;
+				((struct sockaddr_in *)&rt.rt_genmask)->sin_family = AF_INET;
+				rt.rt_flags = RTF_UP | RTF_GATEWAY;
+				rt.rt_dev = (char *)n;
+				for (int i = 0; i < 20 && ioctl(sk, SIOCADDRT, &rt) < 0; i++)
+					usleep(50000); /* il collegamento può impiegare un attimo */
+			}
+		}
+	}
+out:
+	if (d) closedir(d);
+	if (sk >= 0) close(sk);
+}
+
+/* 1 se almeno un'interfaccia (non lo) è accesa e collegata. */
+int sys_net_up(char *name, int n)
+{
+	DIR *d = opendir("/sys/class/net");
+	struct dirent *de;
+	int sk = socket(AF_INET, SOCK_DGRAM, 0), up = 0;
+	if (name)
+		snprintf(name, n, "Nessuna rete");
+	while (d && sk >= 0 && (de = readdir(d))) {
+		if (de->d_name[0] == '.' || !strcmp(de->d_name, "lo"))
+			continue;
+		int fl = iface_flags(sk, de->d_name, 0, 0);
+		if (fl >= 0 && (fl & IFF_UP) && (fl & IFF_RUNNING)) {
+			up = 1;
+			if (name) /* nell'emulatore la rete è un "cavo" virtuale */
+				snprintf(name, n, "%s", !strncmp(de->d_name, "wlan", 4) ? "Wi-Fi" : "Emulatore");
+		}
+	}
+	if (d) closedir(d);
+	if (sk >= 0) close(sk);
+	return up;
 }

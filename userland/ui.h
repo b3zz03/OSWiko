@@ -38,6 +38,16 @@ void ui_watch_fd(int fd, void (*cb)(int fd)); /* chiama cb quando fd è leggibil
 void ui_notify(struct app *a, const char *title, const char *text); /* banner */
 void ui_badges_changed(void);
 
+/* Impostazioni di sistema (centro di controllo) */
+int  ui_brightness(void);  void ui_set_brightness(int v);   /* 0..100 */
+int  ui_volume(void);      void ui_set_volume(int v);       /* 0..100 */
+int  ui_dnd(void);         void ui_set_dnd(int on);         /* Non disturbare */
+int  ui_airplane(void);    void ui_set_airplane(int on);
+int  ui_wifi(void);        void ui_set_wifi(int on);
+void ui_lock_now(void);
+void ui_draw_icon(struct app *a, int x, int y, int s);
+void ui_apply_overlays(void);  /* oscuramento software, indicatore volume */
+
 /* Elementi grafici comuni */
 void ui_status_bar(int dark_text);
 void ui_home_indicator(int dark);
@@ -55,6 +65,8 @@ int  sys_cpus(void);
 int  sys_load_int(const char *key, int def);   /* /data/settings/<key> */
 void sys_save_int(const char *key, int v);
 int  sys_data_volatile(void);                   /* 1 se /data è solo in RAM */
+void sys_net_set(int up);                       /* accende/spegne la rete */
+int  sys_net_up(char *name, int n);             /* rete attiva? (nome) */
 
 /* Testo accorciato con "…" per stare in maxw pixel */
 void text_fit(const char *s, int px, enum font_weight w, int maxw, char *out, int n);

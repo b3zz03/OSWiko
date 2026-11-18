@@ -8,6 +8,8 @@ Un sistema operativo fatto in casa per il **Wiko Ridge 4G** (Snapdragon 410, 2 G
 
 ![Fotocamera, Galleria e foto nella chat](docs/screenshots/foto.png)
 
+![Centro di controllo: modalità aereo, menu Fotocamera, Non disturbare](docs/screenshots/centro-controllo.png)
+
 Per ora gira nell'emulatore QEMU. Il porting sul telefono vero è la fase 2 (vedi [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ## Cosa c'è
@@ -16,7 +18,8 @@ Per ora gira nell'emulatore QEMU. Il porting sul telefono vero è la fase 2 (ved
 |---|---|
 | **Schermata di blocco** | ora, data in italiano, "scorri verso l'alto per aprire" |
 | **Home** | griglia di icone, dock in vetro, sfondo sfumato, animazione di apertura delle app |
-| **Gesture** | trascina dal bordo inferiore verso l'alto per tornare alla home |
+| **Gesture** | trascina dal bordo inferiore verso l'alto per tornare alla home, dal bordo superiore verso il basso per il centro di controllo |
+| **Centro di controllo** | modalità aereo e rete (spengono davvero la connessione), blocco schermo, ora e batteria, cursori di luminosità e volume, Non disturbare (niente banner), scorciatoie; pressione lunga sulla Fotocamera per le opzioni |
 | **Volpe in Fuga** | corsa infinita in 3D su 3 corsie nel bosco: swipe per cambiare corsia, saltare i tronchi, scivolare sotto le staccionate; gemme da raccogliere |
 | **Balzo** | platform a un tasto: il cubo corre da solo, tocca per saltare spuntoni, blocchi e burroni; percorso fisso da imparare, record e tentativi |
 | **Messaggi** | chat stile WhatsApp con te tramite un bot Telegram: testo e **foto** (in entrambe le direzioni), tastiera a schermo italiana, notifiche a banner e badge sull'icona |
@@ -50,7 +53,8 @@ userland/
   gfx.c / gfx.h  grafica (forme, alpha, blur, immagini)
   text.c         testo vettoriale con cache dei glifi
   input.c        touchscreen / tasti / tastiera (evdev)
-  sys.c          batteria, luminosità, memoria via /sys e /proc
+  sys.c          batteria, luminosità, rete, memoria via /sys e /proc
+  control.c      centro di controllo
   keyboard.c     tastiera a schermo (italiano) e tastiera fisica
   msgd.c         servizio messaggi: long polling Telegram, abbinamento, invio
   net.c          client HTTPS minimale (mbedTLS)
@@ -70,7 +74,7 @@ scripts/             initramfs e script di avvio
 
 Chat, foto e record dei giochi vengono salvati in **`data.img`**, il "disco" del telefono, che lo script crea la prima volta. Quando scarichi una versione nuova di OSWiko, **tieni il tuo `data.img`** (e `telegram.conf`): così non perdi niente.
 
-Comandi nell'emulatore: il **mouse** fa da dito (trascina per gli swipe), **ESC** = tasto Home, **F12** = tasto Power, **Invio** sblocca. Nei giochi funzionano anche le **frecce** e la **barra spaziatrice**. Nella finestra del cmd c'è la shell `osh` (digita `help`).
+Comandi nell'emulatore: il **mouse** fa da dito (trascina per gli swipe; dal bordo in alto apri il centro di controllo), **ESC** = tasto Home, **F12** = tasto Power, **Invio** sblocca. Nei giochi funzionano anche le **frecce** e la **barra spaziatrice**. Nella finestra del cmd c'è la shell `osh` (digita `help`).
 
 ## Messaggi: collegare tuo fratello a te
 
